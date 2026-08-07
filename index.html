@@ -259,7 +259,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
       setLoadStatus(msg, data.warning?'warn':'ok');
     }catch(err){
       autoProductMeta={category:'',seller:'',rating:'',source:'ручной ввод'}; renderMeta();
-      setLoadStatus('Автозагрузка не сработала: '+(err?.message||err)+'. Можно продолжить расчёт вручную.','err');
+      setLoadStatus('Автозагрузка не сработала: '+(err?.message||err)+'. Если это 403/антибот — вставьте полную ссылку из адресной строки Ozon; расчёт вручную продолжает работать.','err');
     }finally{btn.disabled=false;btn.textContent='Загрузить из Ozon';}
   }
 

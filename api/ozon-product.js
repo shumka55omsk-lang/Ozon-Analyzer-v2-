@@ -148,40 +148,77 @@ async function fetchTimed(url, opts={}){
 }
 function skuFromPath(path){const m=path.match(/-(\d{6,})(?:\/|$)/)||path.match(/\/(\d{6,})(?:\/|$)/);return m?m[1]:'';}
 
-module.exports=async function handler(req,res){
-  if(req.method!=='GET') return send(res,405,{ok:false,error:'Используйте GET'});
-  const raw=Array.isArray(req.query?.url)?req.query.url[0]:req.query?.url;
-  if(!raw) return send(res,400,{ok:false,error:'Не передана ссылка Ozon'});
-  let u; try{u=new URL(raw)}catch{return send(res,400,{ok:false,error:'Некорректная ссылка'})}
-  const host=u.hostname.toLowerCase(); if(!ALLOWED_HOSTS.has(host)) return send(res,400,{ok:false,error:'Разрешены только ссылки ozon.ru'});
-  if(!u.pathname.includes('/product/')) return send(res,400,{ok:false,error:'Ссылка не похожа на карточку товара Ozon'});
-  const sku=skuFromPath(u.pathname);
-  const headers={
-    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'Accept':'application/json,text/plain,*/*','Accept-Language':'ru-RU,ru;q=0.9,en;q=0.7','Referer':'https://www.ozon.ru/'
-  };
-  const relative=u.pathname+(u.search||'');
-  let warning='';
+async function resolveProductUrl(raw, headers){
+  let u=new URL(raw);
+  if(u.pathname.includes('/product/') || u.pathname.includes('/products/')) return u;
   try{
-    const apiUrl='https://www.ozon.ru/api/composer-api.bx/page/json/v2?url='+encodeURIComponent(relative);
-    const r=await fetchTimed(apiUrl,{headers});
-    const text=await r.text();
-    if(r.ok){
-      try{
-        const data=JSON.parse(text); const product=parseProduct(data,sku);
-        if(product.name||product.price) return send(res,200,{ok:true,source:'Ozon frontend JSON',product,warning:(!product.weightKg&&!product.lengthCm)?'Габариты в открытом ответе не найдены — проверьте их вручную.':''});
-      }catch{}
+    const r=await fetchTimed(u.toString(),{headers:{...headers,Accept:'text/html,application/xhtml+xml'},redirect:'manual'});
+    const loc=r.headers.get('location');
+    if(loc){
+      const next=new URL(loc,u);
+      if(next.hostname.endsWith('ozon.ru')) return next;
     }
-    warning='Внутренний JSON Ozon недоступен; использован запасной разбор страницы.';
-  }catch{warning='Внутренний JSON Ozon недоступен; использован запасной разбор страницы.'}
+  }catch{}
+  return u;
+}
+
+module.exports=async function handler(req,res){
+  if(req.method!=='GET') return send(res,405,{ok:false,error:'Используйте GET',stage:'request'});
+  const raw=Array.isArray(req.query?.url)?req.query.url[0]:req.query?.url;
+  if(!raw) return send(res,400,{ok:false,error:'Не передана ссылка Ozon',stage:'request'});
+  let u; try{u=new URL(raw)}catch{return send(res,400,{ok:false,error:'Некорректная ссылка',stage:'request'})}
+  if(!u.hostname.toLowerCase().endsWith('ozon.ru')) return send(res,400,{ok:false,error:'Разрешены только ссылки ozon.ru',stage:'request'});
+
+  const headers={
+    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+    'Accept':'application/json,text/plain,*/*',
+    'Accept-Language':'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer':'https://www.ozon.ru/',
+    'Origin':'https://www.ozon.ru',
+    'Sec-CH-UA':'"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+    'Sec-CH-UA-Mobile':'?0',
+    'Sec-CH-UA-Platform':'"Windows"',
+    'Sec-Fetch-Dest':'empty','Sec-Fetch-Mode':'cors','Sec-Fetch-Site':'same-origin',
+    'Cache-Control':'no-cache','Pragma':'no-cache'
+  };
+
+  u=await resolveProductUrl(raw,headers);
+  if(!(u.pathname.includes('/product/') || u.pathname.includes('/products/'))){
+    return send(res,400,{ok:false,error:'Не удалось определить карточку товара из ссылки. Вставьте полную ссылку из адресной строки Ozon.',stage:'resolve-url',resolvedUrl:u.toString()});
+  }
+  const sku=skuFromPath(u.pathname);
+  const relative=u.pathname+(u.search||'');
+  const attempts=[];
+
+  const endpoints=[
+    ['Ozon entrypoint JSON','https://www.ozon.ru/api/entrypoint-api.bx/page/json/v2?url='+encodeURIComponent(relative)+'&layout_container=pdpPage2column&layout_page_index=1&oos_search=false'],
+    ['Ozon composer JSON','https://www.ozon.ru/api/composer-api.bx/page/json/v2?url='+encodeURIComponent(relative)]
+  ];
+  for(const [source,apiUrl] of endpoints){
+    try{
+      const r=await fetchTimed(apiUrl,{headers});
+      const text=await r.text();
+      attempts.push({source,status:r.status,contentType:r.headers.get('content-type')||'',bytes:text.length});
+      if(r.ok){
+        try{
+          const data=JSON.parse(text); const product=parseProduct(data,sku);
+          if(product.name||product.price) return send(res,200,{ok:true,source,product,attempts,warning:(!product.weightKg&&!product.lengthCm)?'Габариты в открытом ответе не найдены — проверьте их вручную.':''});
+        }catch(e){attempts[attempts.length-1].parseError='JSON parse/structure';}
+      }
+    }catch(e){attempts.push({source,status:0,error:e?.name||'fetch_error'});}
+  }
 
   try{
-    const r=await fetchTimed(u.toString(),{headers:{...headers,Accept:'text/html,application/xhtml+xml'}}); const html=await r.text();
-    if(!r.ok) return send(res,502,{ok:false,error:`Ozon вернул HTTP ${r.status}. Вероятно, сработала антибот-защита.`});
-    const product=parseHtml(html,sku);
-    if(product.name||product.price) return send(res,200,{ok:true,source:'Ozon HTML / JSON-LD',product,warning});
-    return send(res,502,{ok:false,error:'Страница открылась, но данные товара не удалось распознать. Введите их вручную.'});
+    const r=await fetchTimed(u.toString(),{headers:{...headers,Accept:'text/html,application/xhtml+xml', 'Sec-Fetch-Dest':'document','Sec-Fetch-Mode':'navigate'}});
+    const html=await r.text();
+    attempts.push({source:'Ozon HTML',status:r.status,contentType:r.headers.get('content-type')||'',bytes:html.length});
+    if(r.ok){
+      const product=parseHtml(html,sku);
+      if(product.name||product.price) return send(res,200,{ok:true,source:'Ozon HTML / JSON-LD',product,attempts,warning:'Использован запасной разбор страницы; часть полей может отсутствовать.'});
+    }
+    const blocked=[403,429].includes(r.status);
+    return send(res,502,{ok:false,error:blocked?'Ozon заблокировал запрос с сервера (антибот).':'Ozon ответил, но данные карточки не распознаны.',stage:'ozon-fetch',ozonStatus:r.status,attempts});
   }catch(e){
-    return send(res,502,{ok:false,error:'Не удалось получить карточку Ozon. Возможна временная антибот-блокировка.'});
+    return send(res,502,{ok:false,error:'Сервер не смог получить карточку Ozon.',stage:'ozon-fetch',detail:e?.name||String(e),attempts});
   }
 };
