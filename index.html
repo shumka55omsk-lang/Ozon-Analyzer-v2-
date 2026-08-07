@@ -43,7 +43,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.tab{padding:8px 10px;border-radius:9px;background:#eef2f8;cursor:pointer;font-weight:700;font-size:12px}.tab.active{background:var(--accent);color:#fff}.panel{display:none}.panel.active{display:block}
 .saved-item{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px;border-bottom:1px solid var(--line)}.saved-item:last-child{border-bottom:0}.saved-title{font-weight:700}.saved-meta{font-size:12px;color:var(--muted)}
 .small{font-size:11px;color:var(--muted)}
-.load-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}.load-row button{height:40px}.status{margin-top:8px;padding:9px 11px;border-radius:10px;background:#f4f7fb;color:var(--muted);font-size:12px}.status.ok{background:#eefaf4;color:var(--good)}.status.err{background:#fff1f1;color:var(--bad)}.status.warn{background:#fff8e8;color:var(--warn)}.readonly{background:#f8faff}.auto-meta{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.meta-pill{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fafcff}.meta-pill b{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}.meta-pill span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.load-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}.load-row button{height:40px}.status{margin-top:8px;padding:9px 11px;border-radius:10px;background:#f4f7fb;color:var(--muted);font-size:12px}.status.ok{background:#eefaf4;color:var(--good)}.status.err{background:#fff1f1;color:var(--bad)}.status.warn{background:#fff8e8;color:var(--warn)}.readonly{background:#f8faff}.auto-meta{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.meta-pill{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fafcff}.meta-pill b{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}.meta-pill span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.browser-helper{margin-top:8px;padding:10px 12px;border:1px dashed #b8c7dc;border-radius:10px;background:#fbfdff;font-size:12px;line-height:1.45}.browser-helper b{color:var(--ink)}.browser-helper a{color:var(--accent);font-weight:700;text-decoration:none}.browser-helper a:hover{text-decoration:underline}
 @media(max-width:560px){.auto-meta{grid-template-columns:1fr}.load-row{grid-template-columns:1fr}}
 @media(max-width:980px){.grid{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.app{padding:12px}.form-grid,.breakdown{grid-template-columns:1fr}.summary{grid-template-columns:1fr 1fr}.top{align-items:flex-start;flex-direction:column}.card{padding:14px}.kpi .v{font-size:18px}}
@@ -70,13 +70,14 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
             <button class="primary" id="loadOzonBtn" type="button">Загрузить из Ozon</button>
           </div>
           <div id="loadStatus" class="status">Вставьте ссылку на карточку и нажмите «Загрузить из Ozon».</div>
+          <div class="browser-helper" id="browserHelper"><b>Надёжная загрузка через Chrome:</b> <span id="extensionState">проверяю расширение…</span> · <a href="ozon-browser-import-extension.zip" download>Скачать расширение</a><br><span class="small">Установить один раз: chrome://extensions → Режим разработчика → «Загрузить распакованное расширение» → выбрать папку <b>extension</b>.</span></div>
           <div class="auto-meta">
             <div class="meta-pill"><b>Категория</b><span id="metaCategory">—</span></div>
             <div class="meta-pill"><b>Продавец</b><span id="metaSeller">—</span></div>
             <div class="meta-pill"><b>Рейтинг</b><span id="metaRating">—</span></div>
             <div class="meta-pill"><b>Источник данных</b><span id="metaSource">ручной ввод</span></div>
           </div>
-          <div class="hint">Автозагрузка использует открытые данные карточки. Ozon может временно блокировать серверный запрос; тогда калькулятор продолжит работать вручную.</div>
+          <div class="hint">Сначала используется установленное расширение Chrome — оно открывает карточку как обычный пользователь и поэтому не зависит от блокировки Vercel → Ozon. Серверная загрузка оставлена только запасным вариантом.</div>
         </div>
         <div class="full">
           <label>Название / пометка конкурента</label>
@@ -232,6 +233,59 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     document.getElementById('metaRating').textContent=autoProductMeta.rating||'—';
     document.getElementById('metaSource').textContent=autoProductMeta.source||'ручной ввод';
   }
+  function applyOzonProduct(data){
+    const p=data?.product||{};
+    if(p.name) el.name.value=p.name;
+    if(Number.isFinite(Number(p.price))&&Number(p.price)>0) el.price.value=Number(p.price);
+    if(Number.isFinite(Number(p.lengthCm))&&Number(p.lengthCm)>0) el.length.value=Number(p.lengthCm).toFixed(1).replace(/\.0$/,'');
+    if(Number.isFinite(Number(p.widthCm))&&Number(p.widthCm)>0) el.width.value=Number(p.widthCm).toFixed(1).replace(/\.0$/,'');
+    if(Number.isFinite(Number(p.heightCm))&&Number(p.heightCm)>0) el.height.value=Number(p.heightCm).toFixed(1).replace(/\.0$/,'');
+    if(Number.isFinite(Number(p.weightKg))&&Number(p.weightKg)>0) el.weight.value=Number(p.weightKg).toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
+    autoProductMeta={category:p.category||'',seller:p.seller||'',rating:p.rating?String(p.rating):'',source:data?.source||'Ozon'};
+    renderMeta(); render();
+    const found=[]; if(p.name)found.push('название'); if(p.price)found.push('цену'); if(p.weightKg)found.push('вес'); if(p.lengthCm||p.widthCm||p.heightCm)found.push('габариты');
+    let msg='Карточка загружена'; if(found.length)msg+=': '+found.join(', ')+'.'; else msg+=' частично.';
+    if(data?.warning) msg+=' '+data.warning;
+    setLoadStatus(msg, data?.warning?'warn':'ok');
+  }
+  function bridgeRequest(type, payload={}, timeoutMs=1500){
+    return new Promise((resolve,reject)=>{
+      const requestId='oz_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+      const expected=type==='OZON_ANALYZER_PING'?'OZON_ANALYZER_PONG':'OZON_ANALYZER_RESPONSE';
+      let timer;
+      const onMessage=e=>{
+        const m=e.data;
+        if(e.source!==window || !m || m.source!=='OZON_ANALYZER_EXTENSION' || m.type!==expected || m.requestId!==requestId) return;
+        cleanup(); resolve(m.response||{});
+      };
+      const cleanup=()=>{window.removeEventListener('message',onMessage); if(timer)clearTimeout(timer)};
+      window.addEventListener('message',onMessage);
+      timer=setTimeout(()=>{cleanup();reject(new Error(type==='OZON_ANALYZER_PING'?'Расширение Chrome не найдено':'Расширение не ответило вовремя'));},timeoutMs);
+      window.postMessage({source:'OZON_ANALYZER_PAGE',type,requestId,...payload},'*');
+    });
+  }
+  async function detectExtension(){
+    const state=document.getElementById('extensionState');
+    try{
+      const r=await bridgeRequest('OZON_ANALYZER_PING',{},1200);
+      if(r?.ok){state.textContent='установлено, версия '+(r.version||'1.0'); state.style.color='var(--good)'; return true;}
+    }catch{}
+    state.textContent='не установлено'; state.style.color='var(--bad)'; return false;
+  }
+  async function loadViaExtension(url){
+    const pong=await bridgeRequest('OZON_ANALYZER_PING',{},1200);
+    if(!pong?.ok) throw new Error('Расширение Chrome не найдено');
+    setLoadStatus('Открываю карточку Ozon через ваш Chrome и считываю данные…');
+    const data=await bridgeRequest('OZON_ANALYZER_REQUEST',{url},32000);
+    if(!data?.ok) throw new Error(data?.error||'Расширение не смогло прочитать карточку');
+    return data;
+  }
+  async function loadViaServer(url){
+    const res=await fetch('/api/ozon-product?url='+encodeURIComponent(url),{headers:{'Accept':'application/json'}});
+    const data=await res.json().catch(()=>({ok:false,error:'Сервер вернул непонятный ответ'}));
+    if(!res.ok||!data.ok) throw new Error(data.error||('Ошибка HTTP '+res.status));
+    return data;
+  }
   async function loadFromOzon(){
     const url=(el.url.value||'').trim();
     if(!url){setLoadStatus('Сначала вставьте ссылку на товар Ozon.','warn');return;}
@@ -239,27 +293,20 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     try{parsed=new URL(url);}catch{setLoadStatus('Ссылка выглядит некорректно.','err');return;}
     if(!/(^|\.)ozon\.ru$/i.test(parsed.hostname)){setLoadStatus('Нужна ссылка именно на ozon.ru.','err');return;}
     const btn=document.getElementById('loadOzonBtn'); btn.disabled=true; btn.textContent='Загрузка…';
-    setLoadStatus('Получаю открытые данные карточки…');
     try{
-      const res=await fetch('/api/ozon-product?url='+encodeURIComponent(url),{headers:{'Accept':'application/json'}});
-      const data=await res.json().catch(()=>({ok:false,error:'Сервер вернул непонятный ответ'}));
-      if(!res.ok||!data.ok) throw new Error(data.error||('Ошибка HTTP '+res.status));
-      const p=data.product||{};
-      if(p.name) el.name.value=p.name;
-      if(Number.isFinite(Number(p.price))&&Number(p.price)>0) el.price.value=Number(p.price);
-      if(Number.isFinite(Number(p.lengthCm))&&Number(p.lengthCm)>0) el.length.value=Number(p.lengthCm).toFixed(1).replace(/\.0$/,'');
-      if(Number.isFinite(Number(p.widthCm))&&Number(p.widthCm)>0) el.width.value=Number(p.widthCm).toFixed(1).replace(/\.0$/,'');
-      if(Number.isFinite(Number(p.heightCm))&&Number(p.heightCm)>0) el.height.value=Number(p.heightCm).toFixed(1).replace(/\.0$/,'');
-      if(Number.isFinite(Number(p.weightKg))&&Number(p.weightKg)>0) el.weight.value=Number(p.weightKg).toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
-      autoProductMeta={category:p.category||'',seller:p.seller||'',rating:p.rating?String(p.rating):'',source:data.source||'Ozon'};
-      renderMeta(); render();
-      const found=[]; if(p.name)found.push('название'); if(p.price)found.push('цену'); if(p.weightKg)found.push('вес'); if(p.lengthCm||p.widthCm||p.heightCm)found.push('габариты');
-      let msg='Карточка загружена'; if(found.length)msg+=': '+found.join(', ')+'.'; else msg+=' частично.';
-      if(data.warning) msg+=' '+data.warning;
-      setLoadStatus(msg, data.warning?'warn':'ok');
+      let data;
+      try{
+        data=await loadViaExtension(url);
+      }catch(extErr){
+        setLoadStatus('Chrome-расширение недоступно ('+(extErr?.message||extErr)+'). Пробую серверный способ…','warn');
+        try{data=await loadViaServer(url)}catch(serverErr){
+          throw new Error('Ozon блокирует серверную загрузку. Установите расширение Chrome из блока выше. Сервер: '+(serverErr?.message||serverErr));
+        }
+      }
+      applyOzonProduct(data);
     }catch(err){
       autoProductMeta={category:'',seller:'',rating:'',source:'ручной ввод'}; renderMeta();
-      setLoadStatus('Автозагрузка не сработала: '+(err?.message||err)+'. Если это 403/антибот — вставьте полную ссылку из адресной строки Ozon; расчёт вручную продолжает работать.','err');
+      setLoadStatus('Автозагрузка не сработала: '+(err?.message||err),'err');
     }finally{btn.disabled=false;btn.textContent='Загрузить из Ozon';}
   }
 
@@ -397,6 +444,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     if(node.tagName==='SELECT'||node.type==='checkbox')node.addEventListener('change',render);
   });
   document.getElementById('saveBtn').onclick=save; document.getElementById('exportBtn').onclick=exportCsv; document.getElementById('resetBtn').onclick=reset; document.getElementById('loadOzonBtn').onclick=loadFromOzon;
+  detectExtension();
   el.url.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadFromOzon();}});
   document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));t.classList.add('active');document.getElementById('panel-'+t.dataset.tab).classList.add('active');});
   renderMeta(); render();
