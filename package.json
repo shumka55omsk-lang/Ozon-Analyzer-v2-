@@ -1,0 +1,7 @@
+{
+  "name": "ozon-competitor-analyzer",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Ozon competitor cost and margin analyzer",
+  "engines": {"node": ">=18"}
+}

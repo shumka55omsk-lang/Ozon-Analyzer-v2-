@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ozon — анализ себестоимости конкурента</title>
+<style>
+:root{
+  --bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#68738a;--line:#e4e9f2;
+  --accent:#2168f3;--accent2:#eaf1ff;--good:#16834d;--bad:#c03838;--warn:#b26a00;
+  --shadow:0 8px 26px rgba(32,56,96,.07);--radius:16px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.app{max-width:1440px;margin:auto;padding:22px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+.title h1{font-size:24px;margin:0 0 4px}.title p{margin:0;color:var(--muted)}
+.badge{background:var(--accent2);color:var(--accent);padding:8px 11px;border-radius:999px;font-weight:700;white-space:nowrap}
+.grid{display:grid;grid-template-columns:minmax(360px, .9fr) minmax(540px,1.55fr);gap:16px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
+.card h2{font-size:17px;margin:0 0 14px}.card h3{font-size:14px;margin:18px 0 10px;color:#3b475e}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.full{grid-column:1/-1}
+label{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}
+input,select{width:100%;border:1px solid #ccd5e4;border-radius:10px;padding:10px 11px;background:#fff;color:var(--text);outline:none;font:inherit}
+input:focus,select:focus{border-color:#79a6ff;box-shadow:0 0 0 3px rgba(33,104,243,.09)}
+.input-suffix{position:relative}.input-suffix span{position:absolute;right:11px;top:35px;color:#8791a5;pointer-events:none}.input-suffix input{padding-right:43px}
+.hint{font-size:12px;color:var(--muted);margin-top:6px}
+.row{display:flex;gap:9px;align-items:center}.row>*{flex:1}
+.switchrow{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px}
+.switchrow input{width:18px;height:18px;accent-color:var(--accent)}
+.range-wrap{display:grid;grid-template-columns:1fr 80px;gap:10px;align-items:center}.range-wrap input[type=range]{padding:0;border:0;box-shadow:none;accent-color:var(--accent)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+button{border:0;border-radius:10px;padding:10px 13px;font:600 13px/1.2 inherit;cursor:pointer;background:#eef2f8;color:#33415c}
+button.primary{background:var(--accent);color:#fff}button.danger{background:#fff0f0;color:var(--bad)}
+.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.kpi{border:1px solid var(--line);border-radius:14px;padding:13px;background:#fff}.kpi .v{font-size:22px;font-weight:800;margin-top:4px}.kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}.kpi.good .v{color:var(--good)}.kpi.bad .v{color:var(--bad)}
+.breakdown{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
+table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{font-size:11px;color:var(--muted);text-transform:uppercase;background:#f8faff}td.num,th.num{text-align:right}tr:last-child td{border-bottom:0}.total{font-weight:800}.neg{color:var(--bad)}.pos{color:var(--good)}
+.bar{height:12px;background:#edf1f6;border-radius:999px;overflow:hidden;display:flex;margin:12px 0 7px}.seg{height:100%}.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--muted)}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:currentColor}
+.note{border-left:3px solid #8caef8;padding:9px 11px;background:#f7faff;border-radius:8px;color:#52617a;font-size:12px;margin-top:12px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.tab{padding:8px 10px;border-radius:9px;background:#eef2f8;cursor:pointer;font-weight:700;font-size:12px}.tab.active{background:var(--accent);color:#fff}.panel{display:none}.panel.active{display:block}
+.saved-item{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px;border-bottom:1px solid var(--line)}.saved-item:last-child{border-bottom:0}.saved-title{font-weight:700}.saved-meta{font-size:12px;color:var(--muted)}
+.small{font-size:11px;color:var(--muted)}
+.load-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}.load-row button{height:40px}.status{margin-top:8px;padding:9px 11px;border-radius:10px;background:#f4f7fb;color:var(--muted);font-size:12px}.status.ok{background:#eefaf4;color:var(--good)}.status.err{background:#fff1f1;color:var(--bad)}.status.warn{background:#fff8e8;color:var(--warn)}.readonly{background:#f8faff}.auto-meta{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.meta-pill{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fafcff}.meta-pill b{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}.meta-pill span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:560px){.auto-meta{grid-template-columns:1fr}.load-row{grid-template-columns:1fr}}
+@media(max-width:980px){.grid{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.app{padding:12px}.form-grid,.breakdown{grid-template-columns:1fr}.summary{grid-template-columns:1fr 1fr}.top{align-items:flex-start;flex-direction:column}.card{padding:14px}.kpi .v{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="title">
+      <h1>Анализ себестоимости конкурента Ozon</h1>
+      <p>Обратный расчёт: цена конкурента → расходы Ozon → вероятная себестоимость → маржинальность.</p>
+    </div>
+    <div class="badge">Модуль «Анализ конкурентов»</div>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1. Данные товара</h2>
+      <div class="form-grid">
+        <div class="full">
+          <label>Ссылка на товар Ozon</label>
+          <div class="load-row">
+            <input id="url" placeholder="https://www.ozon.ru/product/..." />
+            <button class="primary" id="loadOzonBtn" type="button">Загрузить из Ozon</button>
+          </div>
+          <div id="loadStatus" class="status">Вставьте ссылку на карточку и нажмите «Загрузить из Ozon».</div>
+          <div class="auto-meta">
+            <div class="meta-pill"><b>Категория</b><span id="metaCategory">—</span></div>
+            <div class="meta-pill"><b>Продавец</b><span id="metaSeller">—</span></div>
+            <div class="meta-pill"><b>Рейтинг</b><span id="metaRating">—</span></div>
+            <div class="meta-pill"><b>Источник данных</b><span id="metaSource">ручной ввод</span></div>
+          </div>
+          <div class="hint">Автозагрузка использует открытые данные карточки. Ozon может временно блокировать серверный запрос; тогда калькулятор продолжит работать вручную.</div>
+        </div>
+        <div class="full">
+          <label>Название / пометка конкурента</label>
+          <input id="name" value="Конкурент Ozon" />
+        </div>
+        <div class="input-suffix">
+          <label>Цена продажи покупателю</label>
+          <input id="price" type="number" min="0" step="1" value="990" /><span>₽</span>
+        </div>
+        <div>
+          <label>Схема работы</label>
+          <select id="scheme"><option>FBO</option><option>FBS</option><option>realFBS</option></select>
+        </div>
+        <div class="input-suffix"><label>Длина упаковки</label><input id="length" type="number" min="0" step="0.1" value="40"><span>см</span></div>
+        <div class="input-suffix"><label>Ширина упаковки</label><input id="width" type="number" min="0" step="0.1" value="25"><span>см</span></div>
+        <div class="input-suffix"><label>Высота упаковки</label><input id="height" type="number" min="0" step="0.1" value="3"><span>см</span></div>
+        <div class="input-suffix"><label>Вес</label><input id="weight" type="number" min="0" step="0.01" value="0.3"><span>кг</span></div>
+      </div>
+
+      <h3>2. Тарифы и расходы</h3>
+      <div class="form-grid">
+        <div class="input-suffix"><label>Комиссия за продажу</label><input id="commissionPct" type="number" min="0" max="100" step="0.1" value="20"><span>%</span></div>
+        <div class="input-suffix"><label>Эквайринг / платежи</label><input id="acquiringPct" type="number" min="0" max="100" step="0.1" value="1.5"><span>%</span></div>
+        <div class="input-suffix"><label>Логистика до покупателя</label><input id="logistics" type="number" min="0" step="1" value="70"><span>₽</span></div>
+        <div class="input-suffix"><label>Последняя миля / доставка</label><input id="lastMile" type="number" min="0" step="1" value="25"><span>₽</span></div>
+        <div class="input-suffix"><label>Обработка / отгрузка</label><input id="handling" type="number" min="0" step="1" value="0"><span>₽</span></div>
+        <div class="input-suffix"><label>Хранение на 1 продажу</label><input id="storage" type="number" min="0" step="1" value="3"><span>₽</span></div>
+        <div class="input-suffix"><label>Доставка товара до Ozon</label><input id="supply" type="number" min="0" step="1" value="8"><span>₽</span></div>
+        <div class="input-suffix"><label>Упаковка продавца</label><input id="packaging" type="number" min="0" step="1" value="10"><span>₽</span></div>
+        <div class="input-suffix"><label>ДРР / реклама</label><input id="adsPct" type="number" min="0" max="100" step="0.1" value="8"><span>%</span></div>
+        <div class="input-suffix"><label>Налог с выручки</label><input id="taxPct" type="number" min="0" max="100" step="0.1" value="6"><span>%</span></div>
+        <div class="input-suffix"><label>Возвраты / невыкупы</label><input id="returnRate" type="number" min="0" max="100" step="0.1" value="5"><span>%</span></div>
+        <div class="input-suffix"><label>Стоимость одного возврата</label><input id="returnCost" type="number" min="0" step="1" value="100"><span>₽</span></div>
+        <div class="input-suffix"><label>Прочие расходы</label><input id="otherPct" type="number" min="0" max="100" step="0.1" value="1"><span>%</span></div>
+        <div class="input-suffix"><label>Прочие фиксированные</label><input id="otherFixed" type="number" min="0" step="1" value="0"><span>₽</span></div>
+      </div>
+
+      <div class="switchrow">
+        <div><strong>Резерв на возвраты</strong><div class="small">Вероятность возврата × стоимость возврата</div></div>
+        <input id="includeReturns" type="checkbox" checked />
+      </div>
+
+      <h3>3. Предполагаемая маржинальность конкурента</h3>
+      <div class="range-wrap">
+        <input id="marginRange" type="range" min="0" max="60" step="1" value="25" />
+        <div class="input-suffix"><input id="marginPct" type="number" min="0" max="90" step="1" value="25"><span>%</span></div>
+      </div>
+      <div class="hint">Маржинальность = чистая прибыль / цена продажи.</div>
+
+      <div class="actions">
+        <button class="primary" id="saveBtn">Сохранить конкурента</button>
+        <button id="exportBtn">Экспорт CSV</button>
+        <button id="resetBtn">Сбросить пример</button>
+      </div>
+    </section>
+
+    <section>
+      <div class="summary">
+        <div class="kpi"><div class="l">Цена продажи</div><div class="v" id="kpiPrice">—</div></div>
+        <div class="kpi"><div class="l">Все расходы до себестоимости</div><div class="v" id="kpiCosts">—</div></div>
+        <div class="kpi good"><div class="l">Осталось до себестоимости</div><div class="v" id="kpiBeforeCost">—</div></div>
+        <div class="kpi"><div class="l">Оценка себестоимости</div><div class="v" id="kpiCogs">—</div></div>
+      </div>
+
+      <section class="card">
+        <div class="tabs">
+          <div class="tab active" data-tab="calc">Расчёт</div>
+          <div class="tab" data-tab="margin">Диапазон себестоимости</div>
+          <div class="tab" data-tab="discount">Ценовая война</div>
+          <div class="tab" data-tab="mine">Мой товар</div>
+          <div class="tab" data-tab="saved">Сохранённые</div>
+        </div>
+
+        <div class="panel active" id="panel-calc">
+          <h2>Финансовая модель</h2>
+          <div class="breakdown">
+            <div>
+              <div class="table-wrap"><table><tbody id="costRows"></tbody></table></div>
+            </div>
+            <div>
+              <div class="table-wrap"><table><tbody id="resultRows"></tbody></table></div>
+              <div class="bar" id="bar"></div>
+              <div class="legend" id="legend"></div>
+              <div class="note" id="analysisText"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-margin">
+          <h2>Сколько может стоить товар у конкурента</h2>
+          <div class="table-wrap"><table><thead><tr><th>Маржинальность</th><th class="num">Чистая прибыль</th><th class="num">Макс. себестоимость</th><th class="num">ROI на себестоимость</th></tr></thead><tbody id="marginRows"></tbody></table></div>
+          <div class="note">Это не фактическая закупочная цена конкурента, а обратная оценка при выбранной структуре расходов. Чем точнее тарифы Ozon, ДРР, налог и возвраты, тем полезнее результат.</div>
+        </div>
+
+        <div class="panel" id="panel-discount">
+          <h2>Что будет, если конкурент снизит цену</h2>
+          <div class="table-wrap"><table><thead><tr><th>Снижение цены</th><th class="num">Новая цена</th><th class="num">Прибыль</th><th class="num">Маржинальность</th><th>Статус</th></tr></thead><tbody id="discountRows"></tbody></table></div>
+        </div>
+
+        <div class="panel" id="panel-mine">
+          <h2>Сравнение с моим товаром</h2>
+          <div class="form-grid" style="max-width:620px;margin-bottom:14px">
+            <div class="input-suffix"><label>Моя себестоимость</label><input id="myCogs" type="number" min="0" step="1" value="320"><span>₽</span></div>
+            <div class="input-suffix"><label>Моя цена продажи</label><input id="myPrice" type="number" min="0" step="1" value="990"><span>₽</span></div>
+          </div>
+          <div class="summary" style="margin-bottom:0">
+            <div class="kpi"><div class="l">Моя прибыль / шт.</div><div class="v" id="myProfit">—</div></div>
+            <div class="kpi"><div class="l">Моя маржинальность</div><div class="v" id="myMargin">—</div></div>
+            <div class="kpi"><div class="l">Себестоимость конкурента</div><div class="v" id="compCogs">—</div></div>
+            <div class="kpi"><div class="l">Разница себестоимости</div><div class="v" id="cogsDiff">—</div></div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-saved">
+          <h2>Сохранённые конкуренты</h2>
+          <div id="savedList" class="table-wrap" style="min-height:80px"></div>
+        </div>
+      </section>
+
+      <section class="card" style="margin-top:16px">
+        <h2>Параметры упаковки</h2>
+        <div class="summary" style="margin-bottom:0">
+          <div class="kpi"><div class="l">Объём</div><div class="v" id="volume">—</div></div>
+          <div class="kpi"><div class="l">Вес</div><div class="v" id="weightView">—</div></div>
+          <div class="kpi"><div class="l">SKU из ссылки</div><div class="v" id="sku">—</div></div>
+          <div class="kpi"><div class="l">Схема</div><div class="v" id="schemeView">—</div></div>
+        </div>
+      </section>
+    </section>
+  </div>
+</div>
+<script>
+(() => {
+  const ids = ['url','name','price','scheme','length','width','height','weight','commissionPct','acquiringPct','logistics','lastMile','handling','storage','supply','packaging','adsPct','taxPct','returnRate','returnCost','otherPct','otherFixed','includeReturns','marginRange','marginPct','myCogs','myPrice'];
+  const el = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
+  const money = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Number.isFinite(n)?n:0)+' ₽';
+  const pct = n => (Number.isFinite(n)?n:0).toFixed(1).replace('.0','')+'%';
+  const num = id => Math.max(0, parseFloat(el[id].value) || 0);
+  const DEFAULTS = {
+    url:'',name:'Конкурент Ozon',price:990,scheme:'FBO',length:40,width:25,height:3,weight:.3,
+    commissionPct:20,acquiringPct:1.5,logistics:70,lastMile:25,handling:0,storage:3,supply:8,packaging:10,
+    adsPct:8,taxPct:6,returnRate:5,returnCost:100,otherPct:1,otherFixed:0,includeReturns:true,marginPct:25,myCogs:320,myPrice:990
+  };
+  let autoProductMeta = {category:'',seller:'',rating:'',source:'ручной ввод'};
+
+  function setLoadStatus(text, type=''){
+    const box=document.getElementById('loadStatus');
+    box.textContent=text; box.className='status'+(type?' '+type:'');
+  }
+  function renderMeta(){
+    document.getElementById('metaCategory').textContent=autoProductMeta.category||'—';
+    document.getElementById('metaSeller').textContent=autoProductMeta.seller||'—';
+    document.getElementById('metaRating').textContent=autoProductMeta.rating||'—';
+    document.getElementById('metaSource').textContent=autoProductMeta.source||'ручной ввод';
+  }
+  async function loadFromOzon(){
+    const url=(el.url.value||'').trim();
+    if(!url){setLoadStatus('Сначала вставьте ссылку на товар Ozon.','warn');return;}
+    let parsed;
+    try{parsed=new URL(url);}catch{setLoadStatus('Ссылка выглядит некорректно.','err');return;}
+    if(!/(^|\.)ozon\.ru$/i.test(parsed.hostname)){setLoadStatus('Нужна ссылка именно на ozon.ru.','err');return;}
+    const btn=document.getElementById('loadOzonBtn'); btn.disabled=true; btn.textContent='Загрузка…';
+    setLoadStatus('Получаю открытые данные карточки…');
+    try{
+      const res=await fetch('/api/ozon-product?url='+encodeURIComponent(url),{headers:{'Accept':'application/json'}});
+      const data=await res.json().catch(()=>({ok:false,error:'Сервер вернул непонятный ответ'}));
+      if(!res.ok||!data.ok) throw new Error(data.error||('Ошибка HTTP '+res.status));
+      const p=data.product||{};
+      if(p.name) el.name.value=p.name;
+      if(Number.isFinite(Number(p.price))&&Number(p.price)>0) el.price.value=Number(p.price);
+      if(Number.isFinite(Number(p.lengthCm))&&Number(p.lengthCm)>0) el.length.value=Number(p.lengthCm).toFixed(1).replace(/\.0$/,'');
+      if(Number.isFinite(Number(p.widthCm))&&Number(p.widthCm)>0) el.width.value=Number(p.widthCm).toFixed(1).replace(/\.0$/,'');
+      if(Number.isFinite(Number(p.heightCm))&&Number(p.heightCm)>0) el.height.value=Number(p.heightCm).toFixed(1).replace(/\.0$/,'');
+      if(Number.isFinite(Number(p.weightKg))&&Number(p.weightKg)>0) el.weight.value=Number(p.weightKg).toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
+      autoProductMeta={category:p.category||'',seller:p.seller||'',rating:p.rating?String(p.rating):'',source:data.source||'Ozon'};
+      renderMeta(); render();
+      const found=[]; if(p.name)found.push('название'); if(p.price)found.push('цену'); if(p.weightKg)found.push('вес'); if(p.lengthCm||p.widthCm||p.heightCm)found.push('габариты');
+      let msg='Карточка загружена'; if(found.length)msg+=': '+found.join(', ')+'.'; else msg+=' частично.';
+      if(data.warning) msg+=' '+data.warning;
+      setLoadStatus(msg, data.warning?'warn':'ok');
+    }catch(err){
+      autoProductMeta={category:'',seller:'',rating:'',source:'ручной ввод'}; renderMeta();
+      setLoadStatus('Автозагрузка не сработала: '+(err?.message||err)+'. Можно продолжить расчёт вручную.','err');
+    }finally{btn.disabled=false;btn.textContent='Загрузить из Ozon';}
+  }
+
+  function extractSku(url){
+    const m = String(url||'').match(/(?:product\/[^/?#]*-)?(\d{6,})(?:[/?#]|$)/i) || String(url||'').match(/\b(\d{6,})\b/);
+    return m ? m[1] : '—';
+  }
+
+  function calculate(priceOverride){
+    const P = priceOverride == null ? num('price') : Math.max(0, priceOverride);
+    const percentageLines = [
+      ['Комиссия Ozon за продажу', P*num('commissionPct')/100],
+      ['Эквайринг / платежи', P*num('acquiringPct')/100],
+      ['Реклама (ДРР)', P*num('adsPct')/100],
+      ['Налог', P*num('taxPct')/100],
+      ['Прочие %', P*num('otherPct')/100]
+    ];
+    const fixedLines = [
+      ['Логистика', num('logistics')],
+      ['Последняя миля / доставка', num('lastMile')],
+      ['Обработка / отгрузка', num('handling')],
+      ['Хранение', num('storage')],
+      ['Поставка до Ozon', num('supply')],
+      ['Упаковка', num('packaging')],
+      ['Прочие фиксированные', num('otherFixed')]
+    ];
+    if(el.includeReturns.checked) fixedLines.splice(4,0,['Резерв на возвраты', num('returnRate')/100*num('returnCost')]);
+    const lines = percentageLines.concat(fixedLines);
+    const percentageRate = (num('commissionPct')+num('acquiringPct')+num('adsPct')+num('taxPct')+num('otherPct'))/100;
+    const fixedCosts = fixedLines.reduce((s,r)=>s+r[1],0);
+    const costs = lines.reduce((s,r)=>s+r[1],0);
+    const beforeCost = P-costs;
+    const targetMargin = num('marginPct')/100;
+    const targetProfit = P*targetMargin;
+    const inferredCogs = beforeCost-targetProfit;
+    return {P, lines, costs, beforeCost, targetProfit, inferredCogs, targetMargin, percentageRate, fixedCosts};
+  }
+
+  function render(){
+    const r=calculate();
+    document.getElementById('kpiPrice').textContent=money(r.P);
+    document.getElementById('kpiCosts').textContent=money(r.costs);
+    document.getElementById('kpiBeforeCost').textContent=money(r.beforeCost);
+    document.getElementById('kpiCogs').textContent=money(Math.max(0,r.inferredCogs));
+
+    document.getElementById('costRows').innerHTML = r.lines.map(([name,v]) => `<tr><td>${name}</td><td class="num neg">− ${money(v)}</td></tr>`).join('')+
+      `<tr class="total"><td>Всего расходов</td><td class="num neg">− ${money(r.costs)}</td></tr>`;
+    const actualProfit = r.P-r.costs-Math.max(0,r.inferredCogs);
+    const breakEven = r.percentageRate < 1 ? (r.fixedCosts + Math.max(0,r.inferredCogs))/(1-r.percentageRate) : Infinity;
+    const payoutPct = r.P ? r.beforeCost/r.P*100 : 0;
+    document.getElementById('resultRows').innerHTML = `
+      <tr><td>Цена продажи</td><td class="num">${money(r.P)}</td></tr>
+      <tr><td>Расходы до себестоимости</td><td class="num neg">− ${money(r.costs)}</td></tr>
+      <tr><td>Осталось продавцу до себестоимости</td><td class="num pos">${money(r.beforeCost)}</td></tr>
+      <tr><td>Предполагаемая себестоимость</td><td class="num">${money(Math.max(0,r.inferredCogs))}</td></tr>
+      <tr><td>Предполагаемая чистая прибыль</td><td class="num ${actualProfit>=0?'pos':'neg'}">${money(actualProfit)}</td></tr>
+      <tr><td>Цена безубыточности</td><td class="num">${Number.isFinite(breakEven)?money(breakEven):'—'}</td></tr>
+      <tr class="total"><td>Маржинальность</td><td class="num">${pct(r.P?actualProfit/r.P*100:0)}</td></tr>`;
+
+    const shares=[
+      ['Расходы',Math.max(0,r.costs),'#ef7b6c'],['Себестоимость',Math.max(0,r.inferredCogs),'#7ca7f8'],['Прибыль',Math.max(0,actualProfit),'#53b886']
+    ];
+    document.getElementById('bar').innerHTML=shares.map(([n,v,c])=>`<div class="seg" style="width:${r.P?Math.min(100,v/r.P*100):0}%;background:${c}"></div>`).join('');
+    document.getElementById('legend').innerHTML=shares.map(([n,v,c])=>`<span style="color:${c}"><i class="dot"></i>${n}: ${money(v)}</span>`).join('');
+
+    let text='';
+    if(r.inferredCogs<0) text=`При этих расходах и маржинальности ${pct(r.targetMargin*100)} экономика не сходится: целевая прибыль выше остатка после расходов. Проверь тарифы или снизь предполагаемую маржу.`;
+    else if(payoutPct<35) text=`После расходов до себестоимости остаётся только ${pct(payoutPct)} цены. Конкуренту нужен очень дешёвый товар или более низкие фактические расходы.`;
+    else text=`При маржинальности ${pct(r.targetMargin*100)} оценочная себестоимость конкурента — около ${money(r.inferredCogs)}. После расходов до себестоимости у него остаётся ${money(r.beforeCost)}.`;
+    document.getElementById('analysisText').textContent=text;
+
+    const margins=[5,10,15,20,25,30,35,40,45,50,55,60];
+    document.getElementById('marginRows').innerHTML=margins.map(m=>{
+      const profit=r.P*m/100, cogs=r.beforeCost-profit, roi=cogs>0?profit/cogs*100:0;
+      return `<tr ${m===num('marginPct')?'class="total"':''}><td>${m}%</td><td class="num">${money(profit)}</td><td class="num ${cogs<0?'neg':''}">${money(cogs)}</td><td class="num">${cogs>0?pct(roi):'—'}</td></tr>`;
+    }).join('');
+
+    const inferred=Math.max(0,r.inferredCogs);
+    document.getElementById('discountRows').innerHTML=[0,5,10,15,20,25,30].map(d=>{
+      const nr=calculate(r.P*(1-d/100)); const profit=nr.P-nr.costs-inferred; const mar=nr.P?profit/nr.P*100:0;
+      const status=profit>0?'<span class="pos">В прибыли</span>':'<span class="neg">Убыток</span>';
+      return `<tr><td>${d?`−${d}%`:'Текущая'}</td><td class="num">${money(nr.P)}</td><td class="num ${profit>=0?'pos':'neg'}">${money(profit)}</td><td class="num">${pct(mar)}</td><td>${status}</td></tr>`;
+    }).join('');
+
+    const myP=num('myPrice'), myC=num('myCogs'), myR=calculate(myP), myProfit=myP-myR.costs-myC, myMargin=myP?myProfit/myP*100:0;
+    document.getElementById('myProfit').textContent=money(myProfit);
+    document.getElementById('myMargin').textContent=pct(myMargin);
+    document.getElementById('compCogs').textContent=money(inferred);
+    const diff=myC-inferred; const diffEl=document.getElementById('cogsDiff'); diffEl.textContent=(diff>0?'+':'')+money(diff); diffEl.style.color=diff<=0?'var(--good)':'var(--bad)';
+
+    const volume=num('length')*num('width')*num('height')/1000;
+    document.getElementById('volume').textContent=volume.toFixed(2).replace('.',',')+' л';
+    document.getElementById('weightView').textContent=num('weight').toFixed(2).replace('.',',')+' кг';
+    document.getElementById('sku').textContent=extractSku(el.url.value);
+    document.getElementById('schemeView').textContent=el.scheme.value;
+    renderSaved();
+  }
+
+  function snapshot(){
+    const data={}; ids.forEach(id=>{ if(id==='marginRange') return; data[id]=el[id].type==='checkbox'?el[id].checked:el[id].value; });
+    data.savedAt=new Date().toISOString(); data.result=calculate(); data.autoProductMeta=autoProductMeta;
+    return data;
+  }
+  function apply(data){
+    Object.keys(data||{}).forEach(k=>{ if(!el[k]) return; if(el[k].type==='checkbox')el[k].checked=!!data[k]; else el[k].value=data[k]; });
+    if(data?.autoProductMeta) autoProductMeta=data.autoProductMeta; else autoProductMeta={category:'',seller:'',rating:'',source:'ручной ввод'}; renderMeta();
+    el.marginRange.value=el.marginPct.value; render();
+  }
+  function getSaved(){try{return JSON.parse(localStorage.getItem('ozonCompetitors')||'[]')}catch{return[]}}
+  function setSaved(arr){localStorage.setItem('ozonCompetitors',JSON.stringify(arr));}
+  function save(){const a=getSaved();a.unshift(snapshot());setSaved(a.slice(0,50));renderSaved();}
+  function renderSaved(){
+    const a=getSaved(), box=document.getElementById('savedList');
+    if(!a.length){box.innerHTML='<div style="padding:18px;color:var(--muted)">Пока ничего не сохранено.</div>';return;}
+    box.innerHTML=a.map((x,i)=>`<div class="saved-item"><div><div class="saved-title">${escapeHtml(x.name||'Конкурент')}</div><div class="saved-meta">${money(parseFloat(x.price)||0)} · ${x.scheme||''} · себестоимость ≈ ${money(Math.max(0,x.result?.inferredCogs||0))}</div></div><div><button data-load="${i}">Открыть</button> <button class="danger" data-del="${i}">×</button></div></div>`).join('');
+    box.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>apply(a[+b.dataset.load]));
+    box.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{a.splice(+b.dataset.del,1);setSaved(a);renderSaved();});
+  }
+  function escapeHtml(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+  function exportCsv(){
+    const r=calculate();
+    const rows=[['Параметр','Значение'],['Название',el.name.value],['URL',el.url.value],['SKU',extractSku(el.url.value)],['Схема',el.scheme.value],['Цена',r.P],...r.lines,['Всего расходов',r.costs],['Осталось до себестоимости',r.beforeCost],['Предполагаемая маржинальность, %',num('marginPct')],['Предполагаемая себестоимость',Math.max(0,r.inferredCogs)],['Предполагаемая прибыль',r.P-r.costs-Math.max(0,r.inferredCogs)]];
+    const csv='\ufeff'+rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}), url=URL.createObjectURL(blob), a=document.createElement('a');a.href=url;a.download='ozon-competitor-analysis.csv';a.click();URL.revokeObjectURL(url);
+  }
+  function reset(){autoProductMeta={category:'',seller:'',rating:'',source:'ручной ввод'};apply(DEFAULTS);el.url.value='';renderMeta();setLoadStatus('Вставьте ссылку на карточку и нажмите «Загрузить из Ozon».');}
+
+  ids.forEach(id=>{
+    const node=el[id]; if(!node) return;
+    node.addEventListener(node.type==='range'?'input':'input',()=>{
+      if(id==='marginRange') el.marginPct.value=node.value;
+      if(id==='marginPct') el.marginRange.value=Math.min(60,num('marginPct'));
+      render();
+    });
+    if(node.tagName==='SELECT'||node.type==='checkbox')node.addEventListener('change',render);
+  });
+  document.getElementById('saveBtn').onclick=save; document.getElementById('exportBtn').onclick=exportCsv; document.getElementById('resetBtn').onclick=reset; document.getElementById('loadOzonBtn').onclick=loadFromOzon;
+  el.url.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadFromOzon();}});
+  document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));t.classList.add('active');document.getElementById('panel-'+t.dataset.tab).classList.add('active');});
+  renderMeta(); render();
+})();
+</script>
+</body>
+</html>
