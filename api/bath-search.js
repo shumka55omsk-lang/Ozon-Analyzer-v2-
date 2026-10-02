@@ -50,8 +50,8 @@ module.exports=async function handler(req,res){
     const to=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-1));
     const from=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-7));
     const body={
-      date_from:dstr(from),
-      date_to:dstr(to),
+      date_from:dstr(from)+'T00:00:00Z',
+      date_to:dstr(to)+'T23:59:59Z',
       page:0,
       page_size:1000,
       skus:products.map(x=>String(x.sku)),
