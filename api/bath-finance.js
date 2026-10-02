@@ -93,6 +93,7 @@ module.exports=async function handler(req,res){
         commission:0,
         delivery:0,
         itemFees:0,
+        acquiring:0,
         costs:0,
         postingHits:0,
         feeBreakdown:{}
@@ -148,6 +149,7 @@ module.exports=async function handler(req,res){
             s.itemFees+=cost;
             const typeId=String(fee?.type_id??'');
             const label=typeMap[typeId]?.description||typeMap[typeId]?.name||('Тип '+typeId);
+            if(/эквайринг|acquir/i.test(label)) s.acquiring+=cost;
             s.feeBreakdown[label]=(s.feeBreakdown[label]||0)+cost;
           }
         }
@@ -159,6 +161,9 @@ module.exports=async function handler(req,res){
       const ratio=s.sales>0?s.costs/s.sales:0;
       const nonCommission=s.delivery+s.itemFees;
       const nonCommissionRatio=s.sales>0?nonCommission/s.sales:0;
+      const count=Math.max(1,s.postingHits);
+      const avgDeliveryAndOther=(s.delivery+Math.max(0,s.itemFees-s.acquiring))/count;
+      const avgAcquiring=s.acquiring/count;
       const breakdown=Object.entries(s.feeBreakdown)
         .map(([name,amount])=>({name,amount:r2(amount)}))
         .sort((a,b)=>b.amount-a.amount)
@@ -173,7 +178,10 @@ module.exports=async function handler(req,res){
         commission:r2(s.commission),
         delivery:r2(s.delivery),
         itemFees:r2(s.itemFees),
+        acquiring:r2(s.acquiring),
         costs:r2(s.costs),
+        avgDeliveryAndOther:r2(avgDeliveryAndOther),
+        avgAcquiring:r2(avgAcquiring),
         costRatio:r2(ratio*100),
         nonCommissionCostRatio:r2(nonCommissionRatio*100),
         postingHits:s.postingHits,
