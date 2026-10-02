@@ -121,7 +121,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
       <div class="bath-shared-title">Общие параметры для всех сидушек</div>
       <label>Себестоимость, ₽<input id="bathSharedCogs" type="number" min="0" step="1" value="55"></label>
       <label>Прочие расходы / шт., ₽<input id="bathSharedExtra" type="number" min="0" step="1" placeholder="например 80"></label>
-      <label>Минимальная прибыль / шт., ₽<input id="bathSharedProfit" type="number" min="0" step="1" placeholder="например 100"></label>
+      <label>Минимальная прибыль / шт., ₽<input id="bathSharedProfit" type="number" min="0" step="1" value="200"></label>
       <button id="bathApplyAllBtn" type="button">Применить ко всем 4</button>
     </div>
     <div id="sellerStatus" class="status">Подключаю магазин Ozon…</div>
@@ -317,7 +317,15 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   }
   function sellerCfg(productId){
     const k=String(productId||'');
-    return sellerCosts[k] || {cogs:BATH_SEAT_IDS.has(k)?55:0,extra:0,minProfit:0};
+    const saved=sellerCosts[k]||{};
+    if(BATH_SEAT_IDS.has(k)){
+      return {
+        cogs:Number(saved.cogs)>0?Number(saved.cogs):55,
+        extra:Math.max(0,Number(saved.extra)||0),
+        minProfit:Number(saved.minProfit)>0?Number(saved.minProfit):200
+      };
+    }
+    return {cogs:Math.max(0,Number(saved.cogs)||0),extra:Math.max(0,Number(saved.extra)||0),minProfit:Math.max(0,Number(saved.minProfit)||0)};
   }
   function sellerSchemeCommission(p){
     const scheme=document.getElementById('sellerScheme')?.value||'FBO';
@@ -688,7 +696,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     const extra=Math.max(0,Number(document.getElementById('bathSharedExtra')?.value)||0);
     const minProfit=Math.max(0,Number(document.getElementById('bathSharedProfit')?.value)||0);
     for(const id of BATH_SEAT_IDS){
-      sellerCosts[id]={cogs,extra,minProfit};
+      sellerCosts[id]={cogs:cogs||55,extra,minProfit:minProfit||200};
     }
     saveSellerCosts();
     renderSellerProducts();
