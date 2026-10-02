@@ -107,6 +107,32 @@ function analyticsFor(productId,analytics){
   };
 }
 
+function wbSummary(item){
+  const h=(Array.isArray(item?.history)?item.history:[])
+    .slice()
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const last=h[h.length-1]||{};
+  const last2=h.slice(-2);
+  const before=h.slice(0,-2);
+  const baseline=avg(before.map(x=>x.orders));
+  const recent=avg(last2.map(x=>x.orders));
+  const ratio=baseline>0?recent/baseline:0;
+  return {
+    nmID:String(item?.nmID||''),
+    vendorCode:String(item?.vendorCode||''),
+    title:String(item?.title||'Сидушка WB'),
+    date:String(last.date||''),
+    orders:n(last.orders),
+    revenue:n(last.orderSum),
+    opens:n(last.opens),
+    carts:n(last.carts),
+    cartToOrder:n(last.cartToOrderConversion),
+    baseline:r2(baseline),
+    recent:r2(recent),
+    trendPct:baseline>0?r2((ratio-1)*100):0
+  };
+}
+
 function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
   const currentBase=n(p.basePrice||p.price);
   const effective=n(p.sellerPrice||p.price||currentBase);
@@ -173,12 +199,13 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
   };
 }
 
-function buildReport(date,decisions,mode,promoRemoved,analyticsLimited){
+function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalytics){
   const lines=[
-    'Ozon — сидушки для бани · '+date,
-    'Режим: '+mode,
+    'Маркетплейсы — сидушки для бани · '+date,
+    'Ozon: '+mode,
     'Цель: не менее '+TARGET_PROFIT+' ₽ прибыли/шт.',
-    ''
+    '',
+    'OZON'
   ];
   for(const d of decisions){
     const arrow=d.action==='RAISE'?' ↑':d.action==='LOWER'?' ↓':'';
@@ -191,8 +218,24 @@ function buildReport(date,decisions,mode,promoRemoved,analyticsLimited){
     );
   }
   if(promoRemoved) lines.push('Акция: товары удалены из «Эластичного бустинга»; изменение цены отложено до следующего цикла.','');
-  if(analyticsLimited) lines.push('Примечание: поисковые позиции Ozon недоступны без Premium; контроль ведётся по заказам/выручке и экономике.','');
-  lines.push('Автоматика затрагивает только 4 SKU сидушек. EVA-коврики исключены.');
+  if(analyticsLimited) lines.push('Примечание Ozon: поисковые позиции недоступны без Premium; контроль ведётся по заказам/выручке и экономике.','');
+
+  lines.push('WILDBERRIES');
+  if(wbAnalytics?.ok&&Array.isArray(wbAnalytics.items)&&wbAnalytics.items.length){
+    for(const item of wbAnalytics.items){
+      const w=wbSummary(item);
+      lines.push(
+        'WB '+(w.vendorCode||w.nmID)+': '+w.orders+' заказ(ов) вчера · '+rub(w.revenue),
+        'Переходы: '+w.opens+' · корзины: '+w.carts+' · корзина→заказ: '+(w.cartToOrder?pct(w.cartToOrder)+'%':'—'),
+        '2 дня к фону: '+(w.baseline>0?(w.trendPct>=0?'+':'')+w.trendPct+'%':'нет базы'),
+        'Решение: наблюдение — автоцена WB пока отключена.',
+        ''
+      );
+    }
+  }else{
+    lines.push('WB: аналитика временно недоступна; Ozon-автоматика продолжает работать.','');
+  }
+  lines.push('Автоматика Ozon затрагивает только 4 SKU сидушек. WB пока только чтение. Остальные товары исключены.');
   return lines.join('\n').slice(0,3900);
 }
 
@@ -203,12 +246,13 @@ module.exports=async function handler(req,res){
   if(!secret||auth!=='Bearer '+secret) return send(res,401,{ok:false,error:'Unauthorized'});
 
   try{
-    const [seller,finance,analytics,promos,search]=await Promise.all([
+    const [seller,finance,analytics,promos,search,wbAnalytics]=await Promise.all([
       jsonGet(APP_BASE+'/api/seller-products'),
       jsonGet(APP_BASE+'/api/bath-finance'),
       jsonGet(APP_BASE+'/api/bath-analytics'),
       jsonGet(APP_BASE+'/api/bath-promos'),
-      jsonGet(APP_BASE+'/api/bath-search').catch(e=>({ok:false,error:e?.message||String(e)}))
+      jsonGet(APP_BASE+'/api/bath-search').catch(e=>({ok:false,error:e?.message||String(e)})),
+      jsonGet(APP_BASE+'/api/wb-analytics').catch(e=>({ok:false,error:e?.message||String(e),items:[]}))
     ]);
 
     const products=(seller.products||[]).filter(p=>BATH_IDS.has(String(p.productId)));
@@ -264,7 +308,7 @@ module.exports=async function handler(req,res){
 
     const date=analytics.dateTo||new Date(Date.now()-86400000).toISOString().slice(0,10);
     const mode=autoprice&&hasWriteKey?'АВТОЦЕНА ВКЛ':'наблюдение / без записи';
-    const report=buildReport(date,decisions,mode,promoRemoved,!search?.ok);
+    const report=buildReport(date,decisions,mode,promoRemoved,!search?.ok,wbAnalytics);
     const tg=await telegram(report);
 
     return send(res,200,{
@@ -277,6 +321,8 @@ module.exports=async function handler(req,res){
       promoResult,
       decisions,
       writes,
+      wbAnalyticsOk:!!wbAnalytics?.ok,
+      wbItems:Array.isArray(wbAnalytics?.items)?wbAnalytics.items.length:0,
       telegram:tg,
       report
     });
