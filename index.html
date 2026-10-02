@@ -61,7 +61,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
 .seller-top-metric{min-width:0}
 .seller-top-metric .mlabel,.seller-metric .mlabel{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.035em;margin-bottom:3px}
 .seller-top-metric .mvalue{font-size:15px;font-weight:800;white-space:nowrap}
-.seller-economy-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.seller-economy-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 .seller-metric{min-width:0;background:#f8faff;border:1px solid #edf1f6;border-radius:10px;padding:8px}
 .seller-metric .mvalue{font-weight:800;white-space:nowrap}
 .seller-metric .edit-cost{width:100%;min-width:0;padding:7px 8px;text-align:right;background:#fff}
@@ -136,7 +136,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     </div>
     <div class="note seller-economy-note">
       Для защиты от акций ориентируемся на цену после акций продавца и поле Ozon «Ограничение для акций и стратегий». 
-      «Рекомендуемое ограничение» — минимальная цена, при которой покрываются комиссия, эквайринг, себестоимость, ваши прочие расходы и заданная минимальная прибыль. 
+      «Рекомендуемое ограничение» — минимальная цена, при которой покрываются текущая комиссия и эквайринг Ozon, фактическая логистика и прочие удержания за последние 14 дней, себестоимость, ваши дополнительные расходы и заданная прибыль 200 ₽. 
       Никакие цены в Ozon сейчас автоматически не меняются.
     </div>
   </section>
@@ -308,6 +308,9 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   const BATH_SEAT_IDS = new Set(['3768184568','3826876199','2808600941','3768033857']);
   let sellerProducts = [];
   let sellerCosts = loadSellerCosts();
+  let bathFinanceByProduct = {};
+  let bathFinanceFallbackFixed = 0;
+  let bathFinanceLoaded = false;
 
   function loadSellerCosts(){
     try{return JSON.parse(localStorage.getItem('ozonSellerCostsV1')||'{}')||{};}catch{return {}}
@@ -340,16 +343,21 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     const cogs=Math.max(0,Number(cfg.cogs)||0);
     const extra=Math.max(0,Number(cfg.extra)||0);
     const minProfit=Math.max(0,Number(cfg.minProfit)||0);
-    const profit=revenue-commission-acquiring-cogs-extra;
+    const finance=bathFinanceByProduct[String(p.productId||'')]||null;
+    const historicalFixed=finance&&Number(finance.postingHits)>0
+      ? Math.max(0,Number(finance.avgDeliveryAndOther)||0)
+      : Math.max(0,Number(bathFinanceFallbackFixed)||0);
+    const financeSource=finance&&Number(finance.postingHits)>0?'fact':(historicalFixed>0?'estimate':'none');
+    const profit=revenue-commission-acquiring-historicalFixed-cogs-extra;
     const margin=revenue>0?profit/revenue*100:0;
     const acquiringPct=revenue>0?acquiring/revenue*100:0;
     const rate=(commissionPct+acquiringPct)/100;
-    const safeRaw=rate<1?(cogs+extra+minProfit)/(1-rate):0;
+    const safeRaw=rate<1?(cogs+extra+minProfit+historicalFixed)/(1-rate):0;
     const safePrice=safeRaw>0?Math.ceil(safeRaw/10)*10:0;
     const filled=cogs>0 && extra>=0 && minProfit>0;
     const belowTarget=filled && profit<minProfit;
     const minPriceTooLow=filled && Number(p.minPrice||0)<safePrice;
-    return {cfg,revenue,commissionPct,commission,acquiring,cogs,extra,minProfit,profit,margin,safePrice,filled,belowTarget,minPriceTooLow};
+    return {cfg,revenue,commissionPct,commission,acquiring,cogs,extra,minProfit,historicalFixed,financeSource,finance,profit,margin,safePrice,filled,belowTarget,minPriceTooLow};
   }
   function sellerIndexLabel(v){
     const x=String(v||'').toUpperCase();
@@ -419,6 +427,11 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
             <input class="edit-cost" data-cost-field="extra" data-product-id="${escapeHtml(p.productId)}" type="number" min="0" step="1" value="${e.extra||''}" placeholder="₽">
           </div>
           <div class="seller-metric">
+            <div class="mlabel">Факт. расходы Ozon / шт.</div>
+            <div class="mvalue">${e.historicalFixed>0?money(e.historicalFixed):'—'}</div>
+            <div class="small">${e.financeSource==='fact'?'по '+Number(e.finance?.postingHits||0)+' начислениям за 14 дней':(e.financeSource==='estimate'?'оценка по другим цветам':'нет истории')}</div>
+          </div>
+          <div class="seller-metric">
             <div class="mlabel">Мин. прибыль / шт.</div>
             <input class="edit-cost" data-cost-field="minProfit" data-product-id="${escapeHtml(p.productId)}" type="number" min="0" step="1" value="${e.minProfit||''}" placeholder="₽">
           </div>
@@ -443,6 +456,29 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     renderSellerSummary();
   }
 
+  async function loadBathFinance(){
+    bathFinanceByProduct={};
+    bathFinanceFallbackFixed=0;
+    bathFinanceLoaded=false;
+    const r=await fetch('/api/bath-finance',{headers:{'Accept':'application/json'},cache:'no-store'});
+    const data=await r.json().catch(()=>({ok:false,error:'Некорректный ответ финансов Ozon'}));
+    if(!r.ok||!data.ok) throw new Error(data.error||('Finance HTTP '+r.status));
+    const items=Array.isArray(data.items)?data.items:[];
+    const vals=[];
+    for(const item of items){
+      const id=String(item.productId||'');
+      if(id) bathFinanceByProduct[id]=item;
+      if(Number(item.postingHits)>0&&Number(item.avgDeliveryAndOther)>0) vals.push(Number(item.avgDeliveryAndOther));
+    }
+    vals.sort((a,b)=>a-b);
+    if(vals.length){
+      const m=Math.floor(vals.length/2);
+      bathFinanceFallbackFixed=vals.length%2?vals[m]:(vals[m-1]+vals[m])/2;
+    }
+    bathFinanceLoaded=true;
+    return data;
+  }
+
   async function loadSellerProducts(){
     const status=document.getElementById('sellerStatus');
     const btn=document.getElementById('sellerRefreshBtn');
@@ -453,10 +489,13 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
       const data=await r.json().catch(()=>({ok:false,error:'Некорректный ответ сервера'}));
       if(!r.ok||!data.ok) throw new Error(data.error||('HTTP '+r.status));
       sellerProducts=(Array.isArray(data.products)?data.products:[]).filter(p=>BATH_SEAT_IDS.has(String(p.productId||'')));
+      let financeWarning='';
+      try{await loadBathFinance();}
+      catch(fe){financeWarning=' Финансовые расходы пока не загрузились: '+(fe?.message||fe)+'.';}
       renderSellerProducts();
       if(status){
-        status.className='status ok';
-        status.textContent='Подключено к Ozon: '+sellerProducts.length+' сидушки. Остальные товары защищены и исключены. Цены не изменяются.'+(data.warning?' '+data.warning:'');
+        status.className=financeWarning?'status warn':'status ok';
+        status.textContent='Подключено к Ozon: '+sellerProducts.length+' сидушки. '+(bathFinanceLoaded?'Реальные расходы Ozon за 14 дней учтены. ':'')+'Остальные товары исключены. Цены не изменяются.'+financeWarning+(data.warning?' '+data.warning:'');
       }
     }catch(e){
       sellerProducts=[];
