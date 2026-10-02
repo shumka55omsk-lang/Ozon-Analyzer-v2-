@@ -4,7 +4,7 @@ const BATH_IDS=new Set(['803971219','919647983']);
 function send(res,status,body){
   res.statusCode=status;
   res.setHeader('Content-Type','application/json; charset=utf-8');
-  res.setHeader('Cache-Control','no-store');
+  res.setHeader('Cache-Control','public, s-maxage=43200, stale-while-revalidate=86400');
   res.end(JSON.stringify(body));
 }
 function token(){
@@ -48,9 +48,9 @@ module.exports=async function handler(req,res){
     const from=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-14));
     const fields=[
       'rrdId','nmId','vendorCode','title','docTypeName','quantity',
-      'retailAmount','retailPriceWithDisc','commissionPercent',
-      'ppvzSalesCommission','forPay','acquiringFee','sellerOperName',
-      'rrDate','deliveryAmount','returnAmount','penalty','additionalPayment',
+      'retailAmount','retailPriceWithDisc','commissionPercent','kvw',
+      'ppvzSalesCommission','forPay','acquiringFee','acquiringPercent','sellerOperName',
+      'rrDate','deliveryAmount','returnAmount','deliveryService','penalty','additionalPayment',
       'rebillLogisticCost','paidStorage','deduction','paidAcceptance','srid'
     ];
     const rows=await wbFinance({
@@ -72,9 +72,14 @@ module.exports=async function handler(req,res){
         rows:0,
         quantity:0,
         retailAmount:0,
+        saleGross:0,
+        saleForPay:0,
+        saleAcquiring:0,
+        saleUnits:0,
         forPay:0,
         commission:0,
         acquiring:0,
+        deliveryService:0,
         rebillLogistics:0,
         storage:0,
         deductions:0,
@@ -90,7 +95,16 @@ module.exports=async function handler(req,res){
       s.forPay+=num(row.forPay);
       s.commission+=Math.abs(num(row.ppvzSalesCommission));
       s.acquiring+=Math.abs(num(row.acquiringFee));
+      s.deliveryService+=Math.abs(num(row.deliveryService));
       s.rebillLogistics+=Math.abs(num(row.rebillLogisticCost));
+      const isSale=String(row.sellerOperName||'').toLowerCase()==='продажа' || String(row.docTypeName||'').toLowerCase()==='продажа';
+      if(isSale){
+        const units=Math.max(0,num(row.quantity))||1;
+        s.saleUnits+=units;
+        s.saleGross+=Math.max(0,num(row.retailPriceWithDisc))*units;
+        s.saleForPay+=num(row.forPay);
+        s.saleAcquiring+=Math.abs(num(row.acquiringFee));
+      }
       s.storage+=Math.abs(num(row.paidStorage));
       s.deductions+=Math.abs(num(row.deduction));
       s.penalties+=Math.abs(num(row.penalty));
@@ -99,7 +113,7 @@ module.exports=async function handler(req,res){
       add(s.operations,op,1);
       if(!s.operationSums[op]) s.operationSums[op]={
         rows:0,quantity:0,retailAmount:0,forPay:0,commission:0,acquiring:0,
-        logistics:0,storage:0,deductions:0,penalties:0,acceptance:0,additionalPayment:0
+        deliveryService:0,rebillLogistics:0,storage:0,deductions:0,penalties:0,acceptance:0,additionalPayment:0
       };
       const o=s.operationSums[op];
       o.rows++;
@@ -108,7 +122,8 @@ module.exports=async function handler(req,res){
       o.forPay+=num(row.forPay);
       o.commission+=Math.abs(num(row.ppvzSalesCommission));
       o.acquiring+=Math.abs(num(row.acquiringFee));
-      o.logistics+=Math.abs(num(row.rebillLogisticCost));
+      o.deliveryService+=Math.abs(num(row.deliveryService));
+      o.rebillLogistics+=Math.abs(num(row.rebillLogisticCost));
       o.storage+=Math.abs(num(row.paidStorage));
       o.deductions+=Math.abs(num(row.deduction));
       o.penalties+=Math.abs(num(row.penalty));
@@ -118,15 +133,37 @@ module.exports=async function handler(req,res){
     const items=Object.values(stats).map(s=>({
       ...s,
       retailAmount:r2(s.retailAmount),
+      saleGross:r2(s.saleGross),
+      saleForPay:r2(s.saleForPay),
+      saleAcquiring:r2(s.saleAcquiring),
+      saleUnits:r2(s.saleUnits),
+      avgSalePrice:s.saleUnits?r2(s.saleGross/s.saleUnits):0,
       forPay:r2(s.forPay),
       commission:r2(s.commission),
       acquiring:r2(s.acquiring),
+      deliveryService:r2(s.deliveryService),
       rebillLogistics:r2(s.rebillLogistics),
       storage:r2(s.storage),
       deductions:r2(s.deductions),
       penalties:r2(s.penalties),
       paidAcceptance:r2(s.paidAcceptance),
       avgForPayPerRow:s.rows?r2(s.forPay/s.rows):0,
+      variableRetention:s.saleGross>0?r2((s.saleForPay-s.saleAcquiring)/s.saleGross):0,
+      fixedMarketplaceCosts:r2(
+        s.deliveryService+s.rebillLogistics+s.storage+s.deductions+s.penalties+s.paidAcceptance
+      ),
+      fixedMarketplaceCostPerSale:s.saleUnits?r2(
+        (s.deliveryService+s.rebillLogistics+s.storage+s.deductions+s.penalties+s.paidAcceptance)/s.saleUnits
+      ):0,
+      estimatedProfitPerSale:s.saleUnits?r2(
+        ((s.saleForPay-s.saleAcquiring)/s.saleUnits)
+        -((s.deliveryService+s.rebillLogistics+s.storage+s.deductions+s.penalties+s.paidAcceptance)/s.saleUnits)
+        -55
+      ):0,
+      safePriceFor200:(s.saleGross>0&&s.saleUnits>0&&((s.saleForPay-s.saleAcquiring)/s.saleGross)>0)
+        ?Math.ceil(((55+200+((s.deliveryService+s.rebillLogistics+s.storage+s.deductions+s.penalties+s.paidAcceptance)/s.saleUnits))
+          /((s.saleForPay-s.saleAcquiring)/s.saleGross))/10)*10
+        :0,
       topOperations:Object.entries(s.operations)
         .sort((a,b)=>b[1]-a[1])
         .slice(0,12)
@@ -140,7 +177,8 @@ module.exports=async function handler(req,res){
           forPay:r2(o.forPay),
           commission:r2(o.commission),
           acquiring:r2(o.acquiring),
-          logistics:r2(o.logistics),
+          deliveryService:r2(o.deliveryService),
+          rebillLogistics:r2(o.rebillLogistics),
           storage:r2(o.storage),
           deductions:r2(o.deductions),
           penalties:r2(o.penalties),
