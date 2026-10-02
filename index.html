@@ -45,7 +45,8 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
 .small{font-size:11px;color:var(--muted)}
 .load-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}.load-row button{height:40px}.status{margin-top:8px;padding:9px 11px;border-radius:10px;background:#f4f7fb;color:var(--muted);font-size:12px}.status.ok{background:#eefaf4;color:var(--good)}.status.err{background:#fff1f1;color:var(--bad)}.status.warn{background:#fff8e8;color:var(--warn)}.readonly{background:#f8faff}.auto-meta{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.meta-pill{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fafcff}.meta-pill b{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}.meta-pill span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.browser-helper{margin-top:8px;padding:10px 12px;border:1px dashed #b8c7dc;border-radius:10px;background:#fbfdff;font-size:12px;line-height:1.45}.browser-helper b{color:var(--ink)}.browser-helper a{color:var(--accent);font-weight:700;text-decoration:none}.browser-helper a:hover{text-decoration:underline}
 .seller-card{margin-bottom:16px}.seller-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.seller-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.seller-actions input{min-width:240px}.readonly-badge{background:#eefaf4;color:var(--good);padding:7px 10px;border-radius:999px;font-weight:800;font-size:12px}.seller-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0 14px}.seller-table{min-width:980px}.seller-product{display:flex;align-items:center;gap:10px;min-width:280px;white-space:normal}.seller-product img{width:44px;height:44px;object-fit:cover;border-radius:9px;border:1px solid var(--line);background:#f4f6fa}.seller-product b{display:block;font-size:13px}.seller-product small{display:block;color:var(--muted);margin-top:2px}.seller-price{font-weight:800}.seller-min{color:var(--muted)}.index-red{color:var(--bad);font-weight:800}.index-super{color:var(--good);font-weight:800}.index-none{color:var(--muted)}
-.seller-table{min-width:1500px}.seller-table .edit-cost{width:96px;padding:7px 8px;text-align:right}.seller-economy-note{margin-top:10px}.status-chip{display:inline-block;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:800}.status-chip.good{background:#eefaf4;color:var(--good)}.status-chip.bad{background:#fff1f1;color:var(--bad)}.status-chip.muted{background:#f1f4f8;color:var(--muted)}.seller-actions select{width:auto;min-width:100px}.seller-actions label{margin:0;display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}.seller-actions label select{margin-left:2px}
+.seller-table{min-width:1500px}.seller-table .edit-cost{width:96px;padding:7px 8px;text-align:right}.bath-shared{display:grid;grid-template-columns:auto repeat(3,minmax(130px,1fr)) auto;gap:10px;align-items:end;margin:10px 0 4px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fafcff}.bath-shared-title{grid-column:1/-1;font-weight:800;font-size:12px}.bath-shared label{margin:0}.bath-shared input{margin-top:5px}.bath-shared button{height:40px}@media(max-width:900px){.bath-shared{grid-template-columns:1fr 1fr}.bath-shared-title{grid-column:1/-1}.bath-shared button{grid-column:1/-1}}@media(max-width:520px){.bath-shared{grid-template-columns:1fr}}
+.seller-economy-note{margin-top:10px}.status-chip{display:inline-block;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:800}.status-chip.good{background:#eefaf4;color:var(--good)}.status-chip.bad{background:#fff1f1;color:var(--bad)}.status-chip.muted{background:#f1f4f8;color:var(--muted)}.seller-actions select{width:auto;min-width:100px}.seller-actions label{margin:0;display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}.seller-actions label select{margin-left:2px}
 
 .seller-card{overflow:hidden}
 .seller-list{display:grid;gap:10px}
@@ -104,32 +105,39 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   <section class="card seller-card">
     <div class="seller-head">
       <div>
-        <h2 style="margin-bottom:4px">Мои товары Ozon — экономика</h2>
-        <div class="small">Цены и комиссии приходят из Seller API. Себестоимость, прочие расходы и минимальную прибыль задаёте вы.</div>
+        <h2 style="margin-bottom:4px">Управление ценами — сидушки для бани</h2>
+        <div class="small">Контроль только 4 SKU сидушек. Остальные товары магазина исключены из этого модуля.</div>
       </div>
-      <div class="readonly-badge">Только расчёт</div>
+      <div class="readonly-badge">4 SKU · безопасный режим</div>
     </div>
     <div class="seller-actions">
-      <input id="sellerSearch" placeholder="Поиск по товару или артикулу" />
+      <input id="sellerSearch" placeholder="Поиск по цвету или артикулу" />
       <label>Схема
         <select id="sellerScheme"><option value="FBO">FBO</option><option value="FBS">FBS</option></select>
       </label>
       <button id="sellerRefreshBtn" class="primary" type="button">Обновить из Ozon</button>
     </div>
+    <div class="bath-shared">
+      <div class="bath-shared-title">Общие параметры для всех сидушек</div>
+      <label>Себестоимость, ₽<input id="bathSharedCogs" type="number" min="0" step="1" value="55"></label>
+      <label>Прочие расходы / шт., ₽<input id="bathSharedExtra" type="number" min="0" step="1" placeholder="например 80"></label>
+      <label>Минимальная прибыль / шт., ₽<input id="bathSharedProfit" type="number" min="0" step="1" placeholder="например 100"></label>
+      <button id="bathApplyAllBtn" type="button">Применить ко всем 4</button>
+    </div>
     <div id="sellerStatus" class="status">Подключаю магазин Ozon…</div>
     <div class="seller-summary">
       <div class="kpi"><div class="l">Товаров</div><div class="v" id="sellerTotal">—</div></div>
-      <div class="kpi"><div class="l">Себестоимость заполнена</div><div class="v" id="sellerCostsFilled">—</div></div>
-      <div class="kpi"><div class="l">В расчётном минусе</div><div class="v" id="sellerLossCount">—</div></div>
-      <div class="kpi"><div class="l">Ниже безопасной цены</div><div class="v" id="sellerUnsafeCount">—</div></div>
+      <div class="kpi"><div class="l">Параметры заполнены</div><div class="v" id="sellerCostsFilled">—</div></div>
+      <div class="kpi"><div class="l">Ниже целевой прибыли</div><div class="v" id="sellerLossCount">—</div></div>
+      <div class="kpi"><div class="l">Ограничение акций ниже нормы</div><div class="v" id="sellerUnsafeCount">—</div></div>
     </div>
     <div id="sellerRows" class="seller-list">
       <div class="seller-empty">Загрузка товаров…</div>
     </div>
     <div class="note seller-economy-note">
-      «Расчётная прибыль» = цена продавца − комиссия Ozon − эквайринг − себестоимость − ваши «прочие расходы / шт.». 
-      В «прочие расходы» внесите логистику, рекламу, налог, упаковку, возвраты и другие расходы на одну продажу. 
-      Пока эти расходы не заполнены, показатель не является фактической чистой прибылью.
+      Для защиты от акций ориентируемся на цену после акций продавца и поле Ozon «Ограничение для акций и стратегий». 
+      «Рекомендуемое ограничение» — минимальная цена, при которой покрываются комиссия, эквайринг, себестоимость, ваши прочие расходы и заданная минимальная прибыль. 
+      Никакие цены в Ozon сейчас автоматически не меняются.
     </div>
   </section>
 
@@ -297,6 +305,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   };
   let autoProductMeta = {category:'',seller:'',rating:'',source:'ручной ввод'};
 
+  const BATH_SEAT_IDS = new Set(['3768184568','3826876199','2808600941','3768033857']);
   let sellerProducts = [];
   let sellerCosts = loadSellerCosts();
 
@@ -308,7 +317,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   }
   function sellerCfg(productId){
     const k=String(productId||'');
-    return sellerCosts[k] || {cogs:0,extra:0,minProfit:0};
+    return sellerCosts[k] || {cogs:BATH_SEAT_IDS.has(k)?55:0,extra:0,minProfit:0};
   }
   function sellerSchemeCommission(p){
     const scheme=document.getElementById('sellerScheme')?.value||'FBO';
@@ -329,8 +338,10 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     const rate=(commissionPct+acquiringPct)/100;
     const safeRaw=rate<1?(cogs+extra+minProfit)/(1-rate):0;
     const safePrice=safeRaw>0?Math.ceil(safeRaw/10)*10:0;
-    const filled=cogs>0;
-    return {cfg,revenue,commissionPct,commission,acquiring,cogs,extra,minProfit,profit,margin,safePrice,filled};
+    const filled=cogs>0 && extra>=0 && minProfit>0;
+    const belowTarget=filled && profit<minProfit;
+    const minPriceTooLow=filled && Number(p.minPrice||0)<safePrice;
+    return {cfg,revenue,commissionPct,commission,acquiring,cogs,extra,minProfit,profit,margin,safePrice,filled,belowTarget,minPriceTooLow};
   }
   function sellerIndexLabel(v){
     const x=String(v||'').toUpperCase();
@@ -339,16 +350,17 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     return '<span class="index-none">'+(x||'—')+'</span>';
   }
   function sellerStatusChip(e){
-    if(!e.filled) return '<span class="status-chip muted">Заполните себестоимость</span>';
+    if(e.minProfit<=0) return '<span class="status-chip muted">Задайте мин. прибыль</span>';
     if(e.profit<0) return '<span class="status-chip bad">Убыток</span>';
-    if(e.safePrice>0 && e.revenue<e.safePrice) return '<span class="status-chip bad">Ниже безопасной</span>';
-    return '<span class="status-chip good">В норме</span>';
+    if(e.belowTarget) return '<span class="status-chip bad">Прибыль ниже цели</span>';
+    if(e.minPriceTooLow) return '<span class="status-chip bad">Поднять ограничение акций</span>';
+    return '<span class="status-chip good">Защищено</span>';
   }
   function renderSellerSummary(){
     const econ=sellerProducts.map(sellerEconomy);
     const filled=econ.filter(x=>x.filled);
-    const losses=filled.filter(x=>x.profit<0).length;
-    const unsafe=filled.filter(x=>x.safePrice>0&&x.revenue<x.safePrice).length;
+    const losses=filled.filter(x=>x.belowTarget).length;
+    const unsafe=filled.filter(x=>x.minPriceTooLow).length;
     document.getElementById('sellerTotal').textContent=String(sellerProducts.length);
     document.getElementById('sellerCostsFilled').textContent=filled.length+' / '+sellerProducts.length;
     document.getElementById('sellerLossCount').textContent=String(losses);
@@ -365,26 +377,27 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     const rows=document.getElementById('sellerRows');
     if(!rows) return;
     if(!list.length){
-      rows.innerHTML='<div class="seller-empty">Товары не найдены.</div>';
+      rows.innerHTML='<div class="seller-empty">Сидушки не найдены.</div>';
       renderSellerSummary();
       return;
     }
     rows.innerHTML=list.map(p=>{
       const e=sellerEconomy(p);
       const img=p.image?'/api/ozon-image?url='+encodeURIComponent(p.image):'';
+      const promoDrop=Math.max(0,Number(p.basePrice||0)-Number(p.sellerPrice||0));
       return `<article class="seller-item">
         <div class="seller-main">
           <div class="seller-product">
             <div class="seller-photo"><span>Нет фото</span>${img?'<img src="'+img+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':''}</div>
             <div class="seller-product-copy">
-              <b>${escapeHtml(p.name||'Товар')}</b>
+              <b>${escapeHtml(p.name||'Сидушка для бани')}</b>
               <small>Артикул: ${escapeHtml(p.offerId||'—')} · ID: ${escapeHtml(p.productId||'—')}</small>
-              <div class="seller-index">Индекс: ${sellerIndexLabel(p.priceIndexColor)}</div>
+              <div class="seller-index">Индекс: ${sellerIndexLabel(p.priceIndexColor)}${p.ozonActionsExist?' · <span class="index-red">есть акция Ozon</span>':''}</div>
             </div>
           </div>
-          <div class="seller-top-metric"><div class="mlabel">Цена покупателю</div><div class="mvalue">${money(Number(p.price)||0)}</div></div>
-          <div class="seller-top-metric"><div class="mlabel">Цена продавца</div><div class="mvalue">${money(e.revenue)}</div></div>
-          <div class="seller-top-metric"><div class="mlabel">Комиссия</div><div class="mvalue">${pct(e.commissionPct)}</div><div class="small">− ${money(e.commission)}</div></div>
+          <div class="seller-top-metric"><div class="mlabel">Базовая цена</div><div class="mvalue">${money(Number(p.basePrice)||0)}</div></div>
+          <div class="seller-top-metric"><div class="mlabel">После акций продавца</div><div class="mvalue">${money(Number(p.sellerPrice)||0)}</div><div class="small">${promoDrop>0?'− '+money(promoDrop):'без снижения'}</div></div>
+          <div class="seller-top-metric"><div class="mlabel">Витрина Ozon</div><div class="mvalue">${money(Number(p.storefrontPrice||p.price)||0)}</div></div>
           <div>${sellerStatusChip(e)}</div>
         </div>
 
@@ -401,10 +414,10 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
             <div class="mlabel">Мин. прибыль / шт.</div>
             <input class="edit-cost" data-cost-field="minProfit" data-product-id="${escapeHtml(p.productId)}" type="number" min="0" step="1" value="${e.minProfit||''}" placeholder="₽">
           </div>
-          <div class="seller-metric"><div class="mlabel">Эквайринг</div><div class="mvalue">− ${money(e.acquiring)}</div></div>
-          <div class="seller-metric"><div class="mlabel">Расчётная прибыль</div><div class="mvalue ${e.filled?(e.profit>=0?'pos':'neg'):''}">${e.filled?money(e.profit):'—'}</div></div>
-          <div class="seller-metric"><div class="mlabel">Маржа</div><div class="mvalue ${e.filled?(e.margin>=0?'pos':'neg'):''}">${e.filled?pct(e.margin):'—'}</div></div>
-          <div class="seller-metric"><div class="mlabel">Безопасная цена</div><div class="mvalue">${e.filled&&e.safePrice?money(e.safePrice):'—'}</div></div>
+          <div class="seller-metric"><div class="mlabel">Текущее ограничение акций</div><div class="mvalue">${Number(p.minPrice)>0?money(Number(p.minPrice)):'—'}</div></div>
+          <div class="seller-metric"><div class="mlabel">Расчётная прибыль</div><div class="mvalue ${e.minProfit>0?(e.profit>=e.minProfit?'pos':'neg'):''}">${e.minProfit>0?money(e.profit):'—'}</div></div>
+          <div class="seller-metric"><div class="mlabel">Маржа</div><div class="mvalue ${e.minProfit>0?(e.margin>=0?'pos':'neg'):''}">${e.minProfit>0?pct(e.margin):'—'}</div></div>
+          <div class="seller-metric"><div class="mlabel">Рекомендуемое ограничение</div><div class="mvalue ${e.minProfit>0&&Number(p.minPrice||0)<e.safePrice?'neg':'pos'}">${e.minProfit>0&&e.safePrice?money(e.safePrice):'—'}</div></div>
         </div>
       </article>`;
     }).join('');
@@ -431,11 +444,11 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
       const r=await fetch('/api/seller-products',{headers:{'Accept':'application/json'},cache:'no-store'});
       const data=await r.json().catch(()=>({ok:false,error:'Некорректный ответ сервера'}));
       if(!r.ok||!data.ok) throw new Error(data.error||('HTTP '+r.status));
-      sellerProducts=Array.isArray(data.products)?data.products:[];
+      sellerProducts=(Array.isArray(data.products)?data.products:[]).filter(p=>BATH_SEAT_IDS.has(String(p.productId||'')));
       renderSellerProducts();
       if(status){
         status.className='status ok';
-        status.textContent='Подключено к Ozon: '+sellerProducts.length+' товаров. Цены не изменяются.'+(data.warning?' '+data.warning:'');
+        status.textContent='Подключено к Ozon: '+sellerProducts.length+' сидушки. Остальные товары защищены и исключены. Цены не изменяются.'+(data.warning?' '+data.warning:'');
       }
     }catch(e){
       sellerProducts=[];
@@ -670,7 +683,17 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   detectExtension();
   el.url.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadFromOzon();}});
   document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));t.classList.add('active');document.getElementById('panel-'+t.dataset.tab).classList.add('active');});
-  document.getElementById('sellerRefreshBtn')?.addEventListener('click',loadSellerProducts);
+  document.getElementById('bathApplyAllBtn')?.addEventListener('click',()=>{
+    const cogs=Math.max(0,Number(document.getElementById('bathSharedCogs')?.value)||0);
+    const extra=Math.max(0,Number(document.getElementById('bathSharedExtra')?.value)||0);
+    const minProfit=Math.max(0,Number(document.getElementById('bathSharedProfit')?.value)||0);
+    for(const id of BATH_SEAT_IDS){
+      sellerCosts[id]={cogs,extra,minProfit};
+    }
+    saveSellerCosts();
+    renderSellerProducts();
+  });
+    document.getElementById('sellerRefreshBtn')?.addEventListener('click',loadSellerProducts);
   document.getElementById('sellerSearch')?.addEventListener('input',renderSellerProducts);
   document.getElementById('sellerScheme')?.addEventListener('change',renderSellerProducts);
   renderMeta(); render(); loadSellerProducts();
