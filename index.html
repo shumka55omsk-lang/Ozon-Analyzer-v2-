@@ -35,7 +35,7 @@ button{border:0;border-radius:10px;padding:10px 13px;font:600 13px/1.2 inherit;c
 button.primary{background:var(--accent);color:#fff}button.danger{background:#fff0f0;color:var(--bad)}
 .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
 .kpi{border:1px solid var(--line);border-radius:14px;padding:13px;background:#fff}.kpi .v{font-size:22px;font-weight:800;margin-top:4px}.kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}.kpi.good .v{color:var(--good)}.kpi.bad .v{color:var(--bad)}
-.breakdown{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.breakdown{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}.breakdown>div{min-width:0}.breakdown .table-wrap{overflow:hidden}.breakdown table{min-width:0;table-layout:fixed}.breakdown td:first-child{white-space:normal;overflow-wrap:anywhere}.breakdown td:last-child{width:130px;white-space:nowrap}
 .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
 table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{font-size:11px;color:var(--muted);text-transform:uppercase;background:#f8faff}td.num,th.num{text-align:right}tr:last-child td{border-bottom:0}.total{font-weight:800}.neg{color:var(--bad)}.pos{color:var(--good)}
 .bar{height:12px;background:#edf1f6;border-radius:999px;overflow:hidden;display:flex;margin:12px 0 7px}.seg{height:100%}.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--muted)}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:currentColor}
