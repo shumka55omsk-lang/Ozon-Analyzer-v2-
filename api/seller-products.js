@@ -166,12 +166,12 @@ module.exports = async function handler(req, res) {
       const commissions = p?.commissions || {};
       const indexes = p?.price_indexes || {};
 
-      const currentPrice = num(
-        pr?.marketing_seller_price ??
-        pr?.price ??
-        p?.marketing_seller_price ??
-        p?.price
-      );
+      const basePrice = num(pr?.price ?? p?.price);
+      const marketingSellerPrice = num(pr?.marketing_seller_price ?? p?.marketing_seller_price);
+      const marketingPrice = num(pr?.marketing_price ?? p?.marketing_price);
+      const storefrontPrice = marketingPrice || marketingSellerPrice || basePrice;
+      const sellerPromoPrice = marketingSellerPrice || basePrice;
+      const marketingActions = p?.marketing_actions || {};
 
       return {
         productId: id,
@@ -180,11 +180,15 @@ module.exports = async function handler(req, res) {
         image: imageOf(d),
         currency: pr?.currency_code || p?.currency_code || 'RUB',
 
-        price: currentPrice,
-        sellerPrice: num(pr?.price ?? p?.price),
+        price: storefrontPrice,
+        storefrontPrice,
+        sellerPrice: sellerPromoPrice,
+        basePrice,
         oldPrice: num(pr?.old_price ?? p?.old_price),
         minPrice: num(pr?.min_price ?? p?.min_price),
-        marketingSellerPrice: num(pr?.marketing_seller_price ?? p?.marketing_seller_price),
+        marketingPrice,
+        marketingSellerPrice,
+        retailPrice: num(pr?.retail_price ?? p?.retail_price),
         netPrice: num(pr?.net_price ?? p?.net_price),
 
         acquiring: num(p?.acquiring),
@@ -198,6 +202,8 @@ module.exports = async function handler(req, res) {
         externalIndexPrice: num(indexes?.external_index_data?.min_price),
 
         autoActionEnabled: !!pr?.auto_action_enabled,
+        ozonActionsExist: !!marketingActions?.ozon_actions_exist,
+        sellerActionsExist: !!marketingActions?.current_period_from || !!marketingActions?.current_period_to,
         archived: !!d?.is_archived
       };
     });
