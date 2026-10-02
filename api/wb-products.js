@@ -36,16 +36,13 @@ function isBath(title,vendor){
   return (s.includes('сидуш')||s.includes('коврик')) && (s.includes('бан')||s.includes('саун'));
 }
 
-async function loadPrices(){
-  const all=[];
-  const limit=1000;
-  for(let offset=0;offset<100000;offset+=limit){
-    const data=await wb(PRICE_BASE+'/api/v2/list/goods/filter?limit='+limit+'&offset='+offset,{method:'GET'});
-    const part=data?.data?.listGoods||data?.listGoods||[];
-    all.push(...part);
-    if(part.length<limit) break;
-  }
-  return all;
+async function loadPricesByIds(nmIds){
+  if(!nmIds.length) return [];
+  const data=await wb(PRICE_BASE+'/api/v2/list/goods/filter',{
+    method:'POST',
+    body:JSON.stringify({nmList:nmIds.map(Number)})
+  });
+  return data?.data?.listGoods||data?.listGoods||[];
 }
 async function loadCards(){
   const all=[];
@@ -73,43 +70,51 @@ async function loadCards(){
 module.exports=async function handler(req,res){
   if(req.method!=='GET') return send(res,405,{ok:false,error:'Используйте GET'});
   try{
-    const [prices,cards]=await Promise.all([loadPrices(),loadCards()]);
-    const cardMap=new Map(cards.map(c=>[String(c.nmID),c]));
-    const products=prices.map(g=>{
-      const c=cardMap.get(String(g.nmID))||{};
+    const cards=await loadCards();
+    const bathCards=cards.filter(c=>isBath(c.title,c.vendorCode)).slice(0,50);
+    const nmIds=bathCards.map(c=>Number(c.nmID)).filter(Boolean);
+    let prices=[];
+    let priceWarning='';
+    try{
+      prices=await loadPricesByIds(nmIds);
+    }catch(e){
+      if(Number(e?.status)===429){
+        priceWarning='WB временно ограничил запрос цен по rate limit. Карточки и аналитика доступны; цены обновятся при следующем разрешённом запросе.';
+      }else throw e;
+    }
+    const priceMap=new Map(prices.map(g=>[String(g.nmID),g]));
+    const bathSeats=bathCards.map(c=>{
+      const g=priceMap.get(String(c.nmID))||{};
       const sizes=Array.isArray(g.sizes)?g.sizes:[];
       const first=sizes[0]||{};
-      const basePrice=Number(first.price||0);
-      const discountedPrice=Number(first.discountedPrice||0);
-      const clubPrice=Number(first.clubDiscountedPrice||0);
       const photos=Array.isArray(c.photos)?c.photos:[];
       const p0=photos[0]||{};
       return {
-        nmID:String(g.nmID||''),
+        nmID:String(c.nmID||''),
         vendorCode:String(g.vendorCode||c.vendorCode||''),
         title:String(c.title||''),
         brand:String(c.brand||''),
         subjectName:String(c.subjectName||''),
-        basePrice,
-        discountedPrice,
-        clubPrice,
+        basePrice:Number(first.price||0),
+        discountedPrice:Number(first.discountedPrice||0),
+        clubPrice:Number(first.clubDiscountedPrice||0),
         discount:Number(g.discount||0),
         clubDiscount:Number(g.clubDiscount||0),
         currency:String(g.currencyIsoCode4217||'RUB'),
         editableSizePrice:!!g.editableSizePrice,
         badTurnover:!!g.isBadTurnover,
         image:p0.big||p0.square||p0['c516x688']||'',
-        isBathSeat:isBath(c.title,g.vendorCode||c.vendorCode)
+        isBathSeat:true,
+        priceLoaded:!!priceMap.get(String(c.nmID))
       };
     });
-    const bathSeats=products.filter(x=>x.isBathSeat);
     return send(res,200,{
       ok:true,
       readOnly:true,
-      total:products.length,
+      total:cards.length,
       bathSeatTotal:bathSeats.length,
       products:bathSeats,
-      allProductsPreview:products.slice(0,20)
+      warning:priceWarning
     });
   }catch(e){
     const status=Number(e?.status)||500;
