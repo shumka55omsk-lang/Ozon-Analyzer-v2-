@@ -348,9 +348,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     if(Number.isFinite(Number(p.heightCm))&&Number(p.heightCm)>0) el.height.value=Number(p.heightCm).toFixed(1).replace(/\.0$/,'');
     if(Number.isFinite(Number(p.weightKg))&&Number(p.weightKg)>0) el.weight.value=Number(p.weightKg).toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
     autoProductMeta={category:p.category||'',seller:p.seller||'',rating:p.rating?String(p.rating):'',source:data?.source||'Ozon'};
-    document.getElementById('sellerRefreshBtn')?.addEventListener('click',loadSellerProducts);
-  document.getElementById('sellerSearch')?.addEventListener('input',renderSellerProducts);
-  renderMeta(); render(); loadSellerProducts();
+    renderMeta(); render();
     const found=[]; if(p.name)found.push('название'); if(p.price)found.push('цену'); if(p.weightKg)found.push('вес'); if(p.lengthCm||p.widthCm||p.heightCm)found.push('габариты');
     let msg='Карточка загружена'; if(found.length)msg+=': '+found.join(', ')+'.'; else msg+=' частично.';
     if(data?.warning) msg+=' '+data.warning;
@@ -555,7 +553,9 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   detectExtension();
   el.url.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadFromOzon();}});
   document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));t.classList.add('active');document.getElementById('panel-'+t.dataset.tab).classList.add('active');});
-  renderMeta(); render();
+  document.getElementById('sellerRefreshBtn')?.addEventListener('click',loadSellerProducts);
+  document.getElementById('sellerSearch')?.addEventListener('input',renderSellerProducts);
+  renderMeta(); render(); loadSellerProducts();
 })();
 </script>
 </body>
