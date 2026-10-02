@@ -590,9 +590,9 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
               <div class="seller-index">Wildberries · ${escapeHtml(p.subjectName||'')}</div>
             </div>
           </div>
-          <div class="seller-top-metric"><div class="mlabel">Цена до скидки</div><div class="mvalue">${money(Number(p.basePrice)||0)}</div></div>
-          <div class="seller-top-metric"><div class="mlabel">Цена со скидкой</div><div class="mvalue">${money(current)}</div><div class="small">скидка ${Number(p.discount||0)}%</div></div>
-          <div class="seller-top-metric"><div class="mlabel">WB Клуб</div><div class="mvalue">${Number(p.clubPrice)>0?money(Number(p.clubPrice)):'—'}</div></div>
+          <div class="seller-top-metric"><div class="mlabel">Цена до скидки</div><div class="mvalue">${p.priceLoaded?money(Number(p.basePrice)||0):'—'}</div></div>
+          <div class="seller-top-metric"><div class="mlabel">Цена со скидкой</div><div class="mvalue">${p.priceLoaded?money(current):'—'}</div><div class="small">${p.priceLoaded?'скидка '+Number(p.discount||0)+'%':'лимит WB — ждём обновления'}</div></div>
+          <div class="seller-top-metric"><div class="mlabel">WB Клуб</div><div class="mvalue">${p.priceLoaded&&Number(p.clubPrice)>0?money(Number(p.clubPrice)):'—'}</div></div>
           <div><span class="status-chip good">Только чтение</span></div>
         </div>
         <div class="seller-economy-grid">
@@ -630,7 +630,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
       renderWbProducts();
       if(status){
         status.className='status ok';
-        status.textContent='Wildberries подключён: найдено '+wbProducts.length+' сидушек. Режим только чтение.';
+        status.textContent='Wildberries подключён: найдено '+wbProducts.length+' сидушек. Режим только чтение.'+(pd.warning?' '+pd.warning:'');
       }
     }catch(e){
       wbProducts=[];wbAnalyticsById={};renderWbProducts();
