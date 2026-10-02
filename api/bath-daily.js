@@ -200,17 +200,15 @@ module.exports=async function handler(req,res){
   if(req.method!=='GET') return send(res,405,{ok:false,error:'Используйте GET'});
   const secret=process.env.CRON_SECRET;
   const auth=String(req.headers?.authorization||'');
-  const manual=String(req.query?.manual||'')==='1';
-  if(!manual){
-    if(!secret||auth!=='Bearer '+secret) return send(res,401,{ok:false,error:'Unauthorized'});
-  }
+  if(!secret||auth!=='Bearer '+secret) return send(res,401,{ok:false,error:'Unauthorized'});
 
   try{
-    const [seller,finance,analytics,promos]=await Promise.all([
+    const [seller,finance,analytics,promos,search]=await Promise.all([
       jsonGet(APP_BASE+'/api/seller-products'),
       jsonGet(APP_BASE+'/api/bath-finance'),
       jsonGet(APP_BASE+'/api/bath-analytics'),
-      jsonGet(APP_BASE+'/api/bath-promos')
+      jsonGet(APP_BASE+'/api/bath-promos'),
+      jsonGet(APP_BASE+'/api/bath-search').catch(e=>({ok:false,error:e?.message||String(e)}))
     ]);
 
     const products=(seller.products||[]).filter(p=>BATH_IDS.has(String(p.productId)));
@@ -228,11 +226,15 @@ module.exports=async function handler(req,res){
     let promoRemoved=false;
     let promoResult=null;
     if(managePromos&&hasWriteKey&&promoSet.size){
-      promoResult=await ozonWrite('/v1/actions/products/deactivate',{
-        action_id:ELASTIC_BOOSTING_ACTION_ID,
-        product_ids:[...promoSet].map(Number)
-      });
-      promoRemoved=true;
+      try{
+        promoResult=await ozonWrite('/v1/actions/products/deactivate',{
+          action_id:ELASTIC_BOOSTING_ACTION_ID,
+          product_ids:[...promoSet].map(Number)
+        });
+        promoRemoved=true;
+      }catch(e){
+        promoResult={ok:false,error:e?.message||String(e)};
+      }
     }
 
     const nowOmsk=new Date(Date.now()+6*60*60*1000);
@@ -262,7 +264,7 @@ module.exports=async function handler(req,res){
 
     const date=analytics.dateTo||new Date(Date.now()-86400000).toISOString().slice(0,10);
     const mode=autoprice&&hasWriteKey?'АВТОЦЕНА ВКЛ':'наблюдение / без записи';
-    const report=buildReport(date,decisions,mode,promoRemoved,!!analytics.limited||true);
+    const report=buildReport(date,decisions,mode,promoRemoved,!search?.ok);
     const tg=await telegram(report);
 
     return send(res,200,{
