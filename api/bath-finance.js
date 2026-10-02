@@ -60,7 +60,9 @@ module.exports=async function handler(req,res){
     const all=[];
     let page=1;
     for(let i=0;i<20;i++){
-      const data=await ozonPost('/v3/finance/transaction/list',{
+      let data;
+      try{
+        data=await ozonPost('/v3/finance/transaction/list',{
         filter:{
           date:{from:fromIso,to:toIso},
           operation_type:[],
@@ -70,6 +72,19 @@ module.exports=async function handler(req,res){
         page,
         page_size:1000
       });
+      }catch(firstErr){
+        if(Number(firstErr?.status)!==404) throw firstErr;
+        data=await ozonPost('/v3/finance/transaction/list/',{
+          filter:{
+            date:{from:fromIso,to:toIso},
+            operation_type:[],
+            posting_number:'',
+            transaction_type:'all'
+          },
+          page,
+          page_size:1000
+        });
+      }
       const result=data?.result||{};
       const ops=Array.isArray(result?.operations)?result.operations:[];
       all.push(...ops);
