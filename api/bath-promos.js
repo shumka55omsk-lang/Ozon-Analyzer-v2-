@@ -10,7 +10,7 @@ function send(res,status,body){
 
 async function request(path,{method='POST',body}={}){
   const clientId=process.env.OZON_CLIENT_ID;
-  const apiKey=process.env.OZON_API_KEY;
+  const apiKey=process.env.OZON_FINANCE_API_KEY||process.env.OZON_API_KEY;
   if(!clientId||!apiKey){const e=new Error('Не настроен ключ товаров Ozon');e.status=500;throw e;}
   const r=await fetch(BASE+path,{
     method,
