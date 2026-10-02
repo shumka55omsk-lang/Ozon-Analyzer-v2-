@@ -427,7 +427,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
             <input class="edit-cost" data-cost-field="extra" data-product-id="${escapeHtml(p.productId)}" type="number" min="0" step="1" value="${e.extra||''}" placeholder="₽">
           </div>
           <div class="seller-metric">
-            <div class="mlabel">Факт. расходы Ozon / шт.</div>
+            <div class="mlabel">Логистика и услуги Ozon / шт.</div>
             <div class="mvalue">${e.historicalFixed>0?money(e.historicalFixed):'—'}</div>
             <div class="small">${e.financeSource==='fact'?'по '+Number(e.finance?.postingHits||0)+' начислениям за 14 дней':(e.financeSource==='estimate'?'оценка по другим цветам':'нет истории')}</div>
           </div>
