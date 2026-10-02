@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Ozon — анализ себестоимости конкурента</title>
+<title>Маркетплейсы — управление ценами</title>
 <style>
 :root{
   --bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#68738a;--line:#e4e9f2;
@@ -96,10 +96,10 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
 <div class="app">
   <div class="top">
     <div class="title">
-      <h1>Анализ себестоимости конкурента Ozon</h1>
-      <p>Обратный расчёт: цена конкурента → расходы Ozon → вероятная себестоимость → маржинальность.</p>
+      <h1>Управление ценами маркетплейсов</h1>
+      <p>Ozon + Wildberries: экономика, динамика продаж и безопасное изменение цен.</p>
     </div>
-    <div class="badge">Модуль «Анализ конкурентов»</div>
+    <div class="badge">Ozon + Wildberries</div>
   </div>
 
   <section class="card seller-card">
@@ -138,6 +138,33 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
       Для защиты от акций ориентируемся на цену после акций продавца и поле Ozon «Ограничение для акций и стратегий». 
       «Рекомендуемое ограничение» — минимальная цена, при которой покрываются текущая комиссия и эквайринг Ozon, фактическая логистика и прочие удержания за последние 14 дней, себестоимость, ваши дополнительные расходы и заданная прибыль 200 ₽. 
       Никакие цены в Ozon сейчас автоматически не меняются.
+    </div>
+  </section>
+
+  <section class="card seller-card" id="wbSection">
+    <div class="seller-head">
+      <div>
+        <h2 style="margin-bottom:4px">Wildberries — сидушки для бани</h2>
+        <div class="small">Только чтение: цены и воронка продаж за 7 дней. Изменение цен WB пока отключено.</div>
+      </div>
+      <div class="readonly-badge">WB · только чтение</div>
+    </div>
+    <div class="seller-actions">
+      <input id="wbSearch" placeholder="Поиск по товару, артикулу или nmID" />
+      <button id="wbRefreshBtn" class="primary" type="button">Обновить из WB</button>
+    </div>
+    <div id="wbStatus" class="status">Ожидаю подключение Wildberries…</div>
+    <div class="seller-summary">
+      <div class="kpi"><div class="l">Сидушек WB</div><div class="v" id="wbTotal">—</div></div>
+      <div class="kpi"><div class="l">Заказов вчера</div><div class="v" id="wbOrdersYesterday">—</div></div>
+      <div class="kpi"><div class="l">Выручка вчера</div><div class="v" id="wbRevenueYesterday">—</div></div>
+      <div class="kpi"><div class="l">Средняя конверсия</div><div class="v" id="wbConversion">—</div></div>
+    </div>
+    <div id="wbRows" class="seller-list">
+      <div class="seller-empty">Для подключения нужен WB_READ_API_TOKEN.</div>
+    </div>
+    <div class="note seller-economy-note">
+      После подключения токена система сопоставит сидушки WB с Ozon, затем добавим реальные финансовые удержания WB и общий алгоритм автоцены. Никакие данные Wildberries сейчас не изменяются.
     </div>
   </section>
 
@@ -506,6 +533,116 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     }
   }
 
+  let wbProducts=[];
+  let wbAnalyticsById={};
+
+  function wbHistory(p){
+    const a=wbAnalyticsById[String(p.nmID||'')];
+    return Array.isArray(a?.history)?a.history:[];
+  }
+  function wbLatest(p){
+    const h=wbHistory(p).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    return h[h.length-1]||{};
+  }
+  function wbAvg(p,field){
+    const h=wbHistory(p);
+    return h.length?h.reduce((s,x)=>s+Number(x?.[field]||0),0)/h.length:0;
+  }
+  function renderWbSummary(){
+    const latest=wbProducts.map(wbLatest);
+    const orders=latest.reduce((s,x)=>s+Number(x.orders||0),0);
+    const revenue=latest.reduce((s,x)=>s+Number(x.orderSum||0),0);
+    const conversions=wbProducts.map(p=>wbAvg(p,'cartToOrderConversion')).filter(x=>x>0);
+    const conv=conversions.length?conversions.reduce((s,x)=>s+x,0)/conversions.length:0;
+    document.getElementById('wbTotal').textContent=String(wbProducts.length);
+    document.getElementById('wbOrdersYesterday').textContent=String(Math.round(orders));
+    document.getElementById('wbRevenueYesterday').textContent=money(revenue);
+    document.getElementById('wbConversion').textContent=conversions.length?pct(conv):'—';
+  }
+  function renderWbProducts(){
+    const rows=document.getElementById('wbRows');
+    if(!rows) return;
+    const q=(document.getElementById('wbSearch')?.value||'').trim().toLowerCase();
+    const list=wbProducts.filter(p=>{
+      if(!q) return true;
+      return String(p.title||'').toLowerCase().includes(q) ||
+             String(p.vendorCode||'').toLowerCase().includes(q) ||
+             String(p.nmID||'').includes(q);
+    });
+    if(!list.length){
+      rows.innerHTML='<div class="seller-empty">Сидушки Wildberries не найдены.</div>';
+      renderWbSummary();
+      return;
+    }
+    rows.innerHTML=list.map(p=>{
+      const y=wbLatest(p);
+      const avgOrders=wbAvg(p,'orders');
+      const avgOpens=wbAvg(p,'opens');
+      const current=Number(p.discountedPrice||p.basePrice||0);
+      const img=p.image?'<img src="'+escapeHtml(p.image)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'';
+      return `<article class="seller-item">
+        <div class="seller-main">
+          <div class="seller-product">
+            <div class="seller-photo"><span>Нет фото</span>${img}</div>
+            <div class="seller-product-copy">
+              <b>${escapeHtml(p.title||'Сидушка для бани')}</b>
+              <small>Артикул: ${escapeHtml(p.vendorCode||'—')} · nmID: ${escapeHtml(p.nmID||'—')}</small>
+              <div class="seller-index">Wildberries · ${escapeHtml(p.subjectName||'')}</div>
+            </div>
+          </div>
+          <div class="seller-top-metric"><div class="mlabel">Цена до скидки</div><div class="mvalue">${money(Number(p.basePrice)||0)}</div></div>
+          <div class="seller-top-metric"><div class="mlabel">Цена со скидкой</div><div class="mvalue">${money(current)}</div><div class="small">скидка ${Number(p.discount||0)}%</div></div>
+          <div class="seller-top-metric"><div class="mlabel">WB Клуб</div><div class="mvalue">${Number(p.clubPrice)>0?money(Number(p.clubPrice)):'—'}</div></div>
+          <div><span class="status-chip good">Только чтение</span></div>
+        </div>
+        <div class="seller-economy-grid">
+          <div class="seller-metric"><div class="mlabel">Заказы вчера</div><div class="mvalue">${Number(y.orders||0)}</div></div>
+          <div class="seller-metric"><div class="mlabel">Выручка вчера</div><div class="mvalue">${money(Number(y.orderSum||0))}</div></div>
+          <div class="seller-metric"><div class="mlabel">Переходы вчера</div><div class="mvalue">${Number(y.opens||0)}</div></div>
+          <div class="seller-metric"><div class="mlabel">Корзины вчера</div><div class="mvalue">${Number(y.carts||0)}</div></div>
+          <div class="seller-metric"><div class="mlabel">Корзина → заказ</div><div class="mvalue">${Number(y.cartToOrderConversion||0)>0?pct(Number(y.cartToOrderConversion)):'—'}</div></div>
+          <div class="seller-metric"><div class="mlabel">Выкуп</div><div class="mvalue">${Number(y.buyoutPercent||0)>0?pct(Number(y.buyoutPercent)):'—'}</div></div>
+          <div class="seller-metric"><div class="mlabel">Заказы / день, 7д</div><div class="mvalue">${avgOrders.toFixed(1).replace('.',',')}</div></div>
+          <div class="seller-metric"><div class="mlabel">Переходы / день, 7д</div><div class="mvalue">${avgOpens.toFixed(1).replace('.',',')}</div></div>
+        </div>
+      </article>`;
+    }).join('');
+    renderWbSummary();
+  }
+  async function loadWb(){
+    const status=document.getElementById('wbStatus');
+    const btn=document.getElementById('wbRefreshBtn');
+    if(btn){btn.disabled=true;btn.textContent='Обновляю…';}
+    if(status){status.className='status';status.textContent='Получаю товары Wildberries…';}
+    try{
+      const pr=await fetch('/api/wb-products',{headers:{Accept:'application/json'},cache:'no-store'});
+      const pd=await pr.json().catch(()=>({ok:false,error:'Некорректный ответ WB'}));
+      if(!pr.ok||!pd.ok) throw new Error(pd.error||('WB HTTP '+pr.status));
+      wbProducts=Array.isArray(pd.products)?pd.products:[];
+      wbAnalyticsById={};
+      if(wbProducts.length){
+        const ar=await fetch('/api/wb-analytics',{headers:{Accept:'application/json'},cache:'no-store'});
+        const ad=await ar.json().catch(()=>({ok:false,error:'Некорректный ответ аналитики WB'}));
+        if(ar.ok&&ad.ok){
+          for(const x of (ad.items||[])) wbAnalyticsById[String(x.nmID||'')]=x;
+        }
+      }
+      renderWbProducts();
+      if(status){
+        status.className='status ok';
+        status.textContent='Wildberries подключён: найдено '+wbProducts.length+' сидушек. Режим только чтение.';
+      }
+    }catch(e){
+      wbProducts=[];wbAnalyticsById={};renderWbProducts();
+      if(status){
+        status.className='status warn';
+        status.textContent='Wildberries ещё не подключён: '+(e?.message||e);
+      }
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent='Обновить из WB';}
+    }
+  }
+
   function setLoadStatus(text, type=''){
     const box=document.getElementById('loadStatus');
     box.textContent=text; box.className='status'+(type?' '+type:'');
@@ -743,7 +880,9 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     document.getElementById('sellerRefreshBtn')?.addEventListener('click',loadSellerProducts);
   document.getElementById('sellerSearch')?.addEventListener('input',renderSellerProducts);
   document.getElementById('sellerScheme')?.addEventListener('change',renderSellerProducts);
-  renderMeta(); render(); loadSellerProducts();
+  document.getElementById('wbRefreshBtn')?.addEventListener('click',loadWb);
+  document.getElementById('wbSearch')?.addEventListener('input',renderWbProducts);
+  renderMeta(); render(); loadSellerProducts(); loadWb();
 })();
 </script>
 </body>
