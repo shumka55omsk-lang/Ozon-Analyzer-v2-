@@ -33,11 +33,27 @@ async function wb(url,opts={}){
 }
 function d(d){return d.toISOString().slice(0,10)}
 
+function isBathCard(c){
+  const s=(String(c?.title||'')+' '+String(c?.vendorCode||'')).toLowerCase();
+  return (s.includes('сидуш')||s.includes('коврик')) && (s.includes('бан')||s.includes('саун'));
+}
 async function loadBathIds(){
-  const r=await fetch('https://ozon-analyzer-v2.vercel.app/api/wb-products',{headers:{Accept:'application/json'},cache:'no-store'});
-  const data=await r.json().catch(()=>({ok:false,error:'Некорректный ответ wb-products'}));
-  if(!r.ok||!data.ok) throw new Error(data.error||('HTTP '+r.status));
-  return (data.products||[]).map(x=>Number(x.nmID)).filter(Boolean).slice(0,20);
+  const ids=[];
+  let cursor={limit:100};
+  for(let i=0;i<50;i++){
+    const data=await wb('https://content-api.wildberries.ru/content/v2/get/cards/list',{
+      method:'POST',
+      body:JSON.stringify({settings:{cursor,filter:{withPhoto:-1}}})
+    });
+    const cards=Array.isArray(data?.cards)?data.cards:[];
+    for(const c of cards){
+      if(isBathCard(c)&&Number(c?.nmID)) ids.push(Number(c.nmID));
+    }
+    const cur=data?.cursor||{};
+    if(cards.length<100||Number(cur.total||0)<100||!cur.updatedAt||!cur.nmID) break;
+    cursor={limit:100,updatedAt:cur.updatedAt,nmID:cur.nmID};
+  }
+  return [...new Set(ids)].slice(0,20);
 }
 
 module.exports=async function handler(req,res){
