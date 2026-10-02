@@ -11,7 +11,7 @@
   --shadow:0 8px 26px rgba(32,56,96,.07);--radius:16px;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;overflow-x:hidden}
 .app{max-width:1440px;margin:auto;padding:22px}
 .top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
 .title h1{font-size:24px;margin:0 0 4px}.title p{margin:0;color:var(--muted)}
@@ -46,6 +46,46 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
 .load-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}.load-row button{height:40px}.status{margin-top:8px;padding:9px 11px;border-radius:10px;background:#f4f7fb;color:var(--muted);font-size:12px}.status.ok{background:#eefaf4;color:var(--good)}.status.err{background:#fff1f1;color:var(--bad)}.status.warn{background:#fff8e8;color:var(--warn)}.readonly{background:#f8faff}.auto-meta{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.meta-pill{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fafcff}.meta-pill b{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}.meta-pill span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.browser-helper{margin-top:8px;padding:10px 12px;border:1px dashed #b8c7dc;border-radius:10px;background:#fbfdff;font-size:12px;line-height:1.45}.browser-helper b{color:var(--ink)}.browser-helper a{color:var(--accent);font-weight:700;text-decoration:none}.browser-helper a:hover{text-decoration:underline}
 .seller-card{margin-bottom:16px}.seller-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.seller-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.seller-actions input{min-width:240px}.readonly-badge{background:#eefaf4;color:var(--good);padding:7px 10px;border-radius:999px;font-weight:800;font-size:12px}.seller-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0 14px}.seller-table{min-width:980px}.seller-product{display:flex;align-items:center;gap:10px;min-width:280px;white-space:normal}.seller-product img{width:44px;height:44px;object-fit:cover;border-radius:9px;border:1px solid var(--line);background:#f4f6fa}.seller-product b{display:block;font-size:13px}.seller-product small{display:block;color:var(--muted);margin-top:2px}.seller-price{font-weight:800}.seller-min{color:var(--muted)}.index-red{color:var(--bad);font-weight:800}.index-super{color:var(--good);font-weight:800}.index-none{color:var(--muted)}
 .seller-table{min-width:1500px}.seller-table .edit-cost{width:96px;padding:7px 8px;text-align:right}.seller-economy-note{margin-top:10px}.status-chip{display:inline-block;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:800}.status-chip.good{background:#eefaf4;color:var(--good)}.status-chip.bad{background:#fff1f1;color:var(--bad)}.status-chip.muted{background:#f1f4f8;color:var(--muted)}.seller-actions select{width:auto;min-width:100px}.seller-actions label{margin:0;display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}.seller-actions label select{margin-left:2px}
+
+.seller-card{overflow:hidden}
+.seller-list{display:grid;gap:10px}
+.seller-item{border:1px solid var(--line);border-radius:14px;background:#fff;padding:12px}
+.seller-main{display:grid;grid-template-columns:minmax(300px,2fr) repeat(3,minmax(110px,.7fr)) auto;gap:12px;align-items:center}
+.seller-product{min-width:0;display:flex;align-items:center;gap:12px;white-space:normal}
+.seller-photo{width:78px;height:78px;flex:0 0 78px;border:1px solid var(--line);border-radius:12px;background:#f3f6fa;display:grid;place-items:center;overflow:hidden;position:relative;color:#98a2b3;font-size:10px;text-align:center}
+.seller-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#fff}
+.seller-product-copy{min-width:0}
+.seller-product b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;line-height:1.3}
+.seller-product small{display:block;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}
+.seller-top-metric{min-width:0}
+.seller-top-metric .mlabel,.seller-metric .mlabel{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.035em;margin-bottom:3px}
+.seller-top-metric .mvalue{font-size:15px;font-weight:800;white-space:nowrap}
+.seller-economy-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.seller-metric{min-width:0;background:#f8faff;border:1px solid #edf1f6;border-radius:10px;padding:8px}
+.seller-metric .mvalue{font-weight:800;white-space:nowrap}
+.seller-metric .edit-cost{width:100%;min-width:0;padding:7px 8px;text-align:right;background:#fff}
+.seller-empty{padding:22px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
+.seller-index{margin-top:5px}
+@media(max-width:1180px){
+  .seller-main{grid-template-columns:1fr 1fr 1fr}
+  .seller-product{grid-column:1/-1}
+  .seller-economy-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .seller-head{align-items:flex-start;flex-direction:column}
+  .seller-actions{align-items:stretch}
+  .seller-actions input{min-width:0;flex:1 1 100%}
+  .seller-main{grid-template-columns:1fr 1fr}
+  .seller-product{grid-column:1/-1}
+  .seller-economy-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .seller-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:480px){
+  .seller-main{grid-template-columns:1fr}
+  .seller-product{grid-column:auto}
+  .seller-economy-grid{grid-template-columns:1fr 1fr}
+  .seller-photo{width:68px;height:68px;flex-basis:68px}
+}
 @media(max-width:560px){.auto-meta{grid-template-columns:1fr}.load-row{grid-template-columns:1fr}}
 @media(max-width:980px){.grid{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.app{padding:12px}.form-grid,.breakdown{grid-template-columns:1fr}.summary{grid-template-columns:1fr 1fr}.top{align-items:flex-start;flex-direction:column}.card{padding:14px}.kpi .v{font-size:18px}}
@@ -83,25 +123,8 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
       <div class="kpi"><div class="l">В расчётном минусе</div><div class="v" id="sellerLossCount">—</div></div>
       <div class="kpi"><div class="l">Ниже безопасной цены</div><div class="v" id="sellerUnsafeCount">—</div></div>
     </div>
-    <div class="table-wrap">
-      <table class="seller-table">
-        <thead><tr>
-          <th>Товар</th>
-          <th>Артикул</th>
-          <th class="num">Цена покупателю</th>
-          <th class="num">Цена продавца</th>
-          <th class="num">Себестоимость</th>
-          <th class="num">Прочие расходы / шт.</th>
-          <th class="num">Мин. прибыль / шт.</th>
-          <th class="num">Комиссия</th>
-          <th class="num">Эквайринг</th>
-          <th class="num">Расчётная прибыль</th>
-          <th class="num">Маржа</th>
-          <th class="num">Безопасная цена</th>
-          <th>Статус</th>
-        </tr></thead>
-        <tbody id="sellerRows"><tr><td colspan="13">Загрузка…</td></tr></tbody>
-      </table>
+    <div id="sellerRows" class="seller-list">
+      <div class="seller-empty">Загрузка товаров…</div>
     </div>
     <div class="note seller-economy-note">
       «Расчётная прибыль» = цена продавца − комиссия Ozon − эквайринг − себестоимость − ваши «прочие расходы / шт.». 
@@ -342,27 +365,48 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     const rows=document.getElementById('sellerRows');
     if(!rows) return;
     if(!list.length){
-      rows.innerHTML='<tr><td colspan="13" style="padding:18px;color:var(--muted)">Товары не найдены.</td></tr>';
+      rows.innerHTML='<div class="seller-empty">Товары не найдены.</div>';
       renderSellerSummary();
       return;
     }
     rows.innerHTML=list.map(p=>{
       const e=sellerEconomy(p);
-      return `<tr>
-        <td><div class="seller-product">${p.image?'<img src="'+escapeHtml(p.image)+'" alt="">':''}<div><b>${escapeHtml(p.name||'Товар')}</b><small>ID ${escapeHtml(p.productId||'—')} · индекс ${sellerIndexLabel(p.priceIndexColor)}</small></div></div></td>
-        <td>${escapeHtml(p.offerId||'—')}</td>
-        <td class="num">${money(Number(p.price)||0)}</td>
-        <td class="num seller-price">${money(e.revenue)}</td>
-        <td class="num"><input class="edit-cost" data-cost-field="cogs" data-product-id="${escapeHtml(p.productId)}" type="number" min="0" step="1" value="${e.cogs||''}" placeholder="₽"></td>
-        <td class="num"><input class="edit-cost" data-cost-field="extra" data-product-id="${escapeHtml(p.productId)}" type="number" min="0" step="1" value="${e.extra||''}" placeholder="₽"></td>
-        <td class="num"><input class="edit-cost" data-cost-field="minProfit" data-product-id="${escapeHtml(p.productId)}" type="number" min="0" step="1" value="${e.minProfit||''}" placeholder="₽"></td>
-        <td class="num">${pct(e.commissionPct)}<div class="small">− ${money(e.commission)}</div></td>
-        <td class="num">− ${money(e.acquiring)}</td>
-        <td class="num ${e.filled?(e.profit>=0?'pos':'neg'):''}">${e.filled?money(e.profit):'—'}</td>
-        <td class="num ${e.filled?(e.margin>=0?'pos':'neg'):''}">${e.filled?pct(e.margin):'—'}</td>
-        <td class="num">${e.filled&&e.safePrice?money(e.safePrice):'—'}</td>
-        <td>${sellerStatusChip(e)}</td>
-      </tr>`;
+      const img=p.image?'/api/ozon-image?url='+encodeURIComponent(p.image):'';
+      return `<article class="seller-item">
+        <div class="seller-main">
+          <div class="seller-product">
+            <div class="seller-photo"><span>Нет фото</span>${img?'<img src="'+img+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':''}</div>
+            <div class="seller-product-copy">
+              <b>${escapeHtml(p.name||'Товар')}</b>
+              <small>Артикул: ${escapeHtml(p.offerId||'—')} · ID: ${escapeHtml(p.productId||'—')}</small>
+              <div class="seller-index">Индекс: ${sellerIndexLabel(p.priceIndexColor)}</div>
+            </div>
+          </div>
+          <div class="seller-top-metric"><div class="mlabel">Цена покупателю</div><div class="mvalue">${money(Number(p.price)||0)}</div></div>
+          <div class="seller-top-metric"><div class="mlabel">Цена продавца</div><div class="mvalue">${money(e.revenue)}</div></div>
+          <div class="seller-top-metric"><div class="mlabel">Комиссия</div><div class="mvalue">${pct(e.commissionPct)}</div><div class="small">− ${money(e.commission)}</div></div>
+          <div>${sellerStatusChip(e)}</div>
+        </div>
+
+        <div class="seller-economy-grid">
+          <div class="seller-metric">
+            <div class="mlabel">Себестоимость</div>
+            <input class="edit-cost" data-cost-field="cogs" data-product-id="${escapeHtml(p.productId)}" type="number" min="0" step="1" value="${e.cogs||''}" placeholder="₽">
+          </div>
+          <div class="seller-metric">
+            <div class="mlabel">Прочие расходы / шт.</div>
+            <input class="edit-cost" data-cost-field="extra" data-product-id="${escapeHtml(p.productId)}" type="number" min="0" step="1" value="${e.extra||''}" placeholder="₽">
+          </div>
+          <div class="seller-metric">
+            <div class="mlabel">Мин. прибыль / шт.</div>
+            <input class="edit-cost" data-cost-field="minProfit" data-product-id="${escapeHtml(p.productId)}" type="number" min="0" step="1" value="${e.minProfit||''}" placeholder="₽">
+          </div>
+          <div class="seller-metric"><div class="mlabel">Эквайринг</div><div class="mvalue">− ${money(e.acquiring)}</div></div>
+          <div class="seller-metric"><div class="mlabel">Расчётная прибыль</div><div class="mvalue ${e.filled?(e.profit>=0?'pos':'neg'):''}">${e.filled?money(e.profit):'—'}</div></div>
+          <div class="seller-metric"><div class="mlabel">Маржа</div><div class="mvalue ${e.filled?(e.margin>=0?'pos':'neg'):''}">${e.filled?pct(e.margin):'—'}</div></div>
+          <div class="seller-metric"><div class="mlabel">Безопасная цена</div><div class="mvalue">${e.filled&&e.safePrice?money(e.safePrice):'—'}</div></div>
+        </div>
+      </article>`;
     }).join('');
     rows.querySelectorAll('[data-cost-field]').forEach(inp=>{
       inp.addEventListener('change',()=>{
