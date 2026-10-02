@@ -44,6 +44,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
 .saved-item{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px;border-bottom:1px solid var(--line)}.saved-item:last-child{border-bottom:0}.saved-title{font-weight:700}.saved-meta{font-size:12px;color:var(--muted)}
 .small{font-size:11px;color:var(--muted)}
 .load-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}.load-row button{height:40px}.status{margin-top:8px;padding:9px 11px;border-radius:10px;background:#f4f7fb;color:var(--muted);font-size:12px}.status.ok{background:#eefaf4;color:var(--good)}.status.err{background:#fff1f1;color:var(--bad)}.status.warn{background:#fff8e8;color:var(--warn)}.readonly{background:#f8faff}.auto-meta{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.meta-pill{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fafcff}.meta-pill b{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}.meta-pill span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.browser-helper{margin-top:8px;padding:10px 12px;border:1px dashed #b8c7dc;border-radius:10px;background:#fbfdff;font-size:12px;line-height:1.45}.browser-helper b{color:var(--ink)}.browser-helper a{color:var(--accent);font-weight:700;text-decoration:none}.browser-helper a:hover{text-decoration:underline}
+.seller-card{margin-bottom:16px}.seller-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.seller-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.seller-actions input{min-width:240px}.readonly-badge{background:#eefaf4;color:var(--good);padding:7px 10px;border-radius:999px;font-weight:800;font-size:12px}.seller-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0 14px}.seller-table{min-width:980px}.seller-product{display:flex;align-items:center;gap:10px;min-width:280px;white-space:normal}.seller-product img{width:44px;height:44px;object-fit:cover;border-radius:9px;border:1px solid var(--line);background:#f4f6fa}.seller-product b{display:block;font-size:13px}.seller-product small{display:block;color:var(--muted);margin-top:2px}.seller-price{font-weight:800}.seller-min{color:var(--muted)}.index-red{color:var(--bad);font-weight:800}.index-super{color:var(--good);font-weight:800}.index-none{color:var(--muted)}
 @media(max-width:560px){.auto-meta{grid-template-columns:1fr}.load-row{grid-template-columns:1fr}}
 @media(max-width:980px){.grid{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.app{padding:12px}.form-grid,.breakdown{grid-template-columns:1fr}.summary{grid-template-columns:1fr 1fr}.top{align-items:flex-start;flex-direction:column}.card{padding:14px}.kpi .v{font-size:18px}}
@@ -58,6 +59,42 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     </div>
     <div class="badge">Модуль «Анализ конкурентов»</div>
   </div>
+
+  <section class="card seller-card">
+    <div class="seller-head">
+      <div>
+        <h2 style="margin-bottom:4px">Мои товары Ozon</h2>
+        <div class="small">Данные загружаются напрямую из Ozon Seller API. Изменение цен пока отключено.</div>
+      </div>
+      <div class="readonly-badge">Только чтение</div>
+    </div>
+    <div class="seller-actions">
+      <input id="sellerSearch" placeholder="Поиск по товару или артикулу" />
+      <button id="sellerRefreshBtn" class="primary" type="button">Обновить из Ozon</button>
+    </div>
+    <div id="sellerStatus" class="status">Подключаю магазин Ozon…</div>
+    <div class="seller-summary">
+      <div class="kpi"><div class="l">Товаров</div><div class="v" id="sellerTotal">—</div></div>
+      <div class="kpi"><div class="l">Средняя цена</div><div class="v" id="sellerAvgPrice">—</div></div>
+      <div class="kpi"><div class="l">Ниже min. цены</div><div class="v" id="sellerBelowMin">—</div></div>
+      <div class="kpi"><div class="l">Индекс RED</div><div class="v" id="sellerRedIndex">—</div></div>
+    </div>
+    <div class="table-wrap">
+      <table class="seller-table">
+        <thead><tr>
+          <th>Товар</th>
+          <th>Артикул</th>
+          <th class="num">Цена покупателю</th>
+          <th class="num">Цена продавца</th>
+          <th class="num">Min. цена</th>
+          <th class="num">Комиссия FBO</th>
+          <th class="num">Комиссия FBS</th>
+          <th>Индекс цены</th>
+        </tr></thead>
+        <tbody id="sellerRows"><tr><td colspan="8">Загрузка…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
 
   <div class="grid">
     <section class="card">
@@ -223,6 +260,75 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   };
   let autoProductMeta = {category:'',seller:'',rating:'',source:'ручной ввод'};
 
+  let sellerProducts = [];
+
+  function sellerIndexLabel(v){
+    const x=String(v||'').toUpperCase();
+    if(x==='RED') return '<span class="index-red">RED</span>';
+    if(x==='SUPER') return '<span class="index-super">SUPER</span>';
+    return '<span class="index-none">'+(x||'—')+'</span>';
+  }
+
+  function renderSellerProducts(){
+    const q=(document.getElementById('sellerSearch')?.value||'').trim().toLowerCase();
+    const list=sellerProducts.filter(p=>{
+      if(!q) return true;
+      return String(p.name||'').toLowerCase().includes(q) ||
+             String(p.offerId||'').toLowerCase().includes(q) ||
+             String(p.productId||'').toLowerCase().includes(q);
+    });
+    const rows=document.getElementById('sellerRows');
+    if(!rows) return;
+    if(!list.length){
+      rows.innerHTML='<tr><td colspan="8" style="padding:18px;color:var(--muted)">Товары не найдены.</td></tr>';
+      return;
+    }
+    rows.innerHTML=list.map(p=>{
+      const below=Number(p.minPrice)>0 && Number(p.price)>0 && Number(p.price)<Number(p.minPrice);
+      return `<tr>
+        <td><div class="seller-product">${p.image?'<img src="'+escapeHtml(p.image)+'" alt="">':''}<div><b>${escapeHtml(p.name||'Товар')}</b><small>ID ${escapeHtml(p.productId||'—')}</small></div></div></td>
+        <td>${escapeHtml(p.offerId||'—')}</td>
+        <td class="num seller-price ${below?'neg':''}">${money(Number(p.price)||0)}</td>
+        <td class="num">${money(Number(p.sellerPrice)||0)}</td>
+        <td class="num seller-min">${Number(p.minPrice)>0?money(Number(p.minPrice)):'—'}</td>
+        <td class="num">${pct(Number(p.salesPercentFbo)||0)}</td>
+        <td class="num">${pct(Number(p.salesPercentFbs)||0)}</td>
+        <td>${sellerIndexLabel(p.priceIndexColor)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function loadSellerProducts(){
+    const status=document.getElementById('sellerStatus');
+    const btn=document.getElementById('sellerRefreshBtn');
+    if(btn){btn.disabled=true;btn.textContent='Обновляю…';}
+    if(status){status.className='status';status.textContent='Получаю товары и цены из Ozon Seller API…';}
+    try{
+      const r=await fetch('/api/seller-products',{headers:{'Accept':'application/json'},cache:'no-store'});
+      const data=await r.json().catch(()=>({ok:false,error:'Некорректный ответ сервера'}));
+      if(!r.ok||!data.ok) throw new Error(data.error||('HTTP '+r.status));
+      sellerProducts=Array.isArray(data.products)?data.products:[];
+      const avg=sellerProducts.length?sellerProducts.reduce((s,p)=>s+(Number(p.price)||0),0)/sellerProducts.length:0;
+      const below=sellerProducts.filter(p=>Number(p.minPrice)>0&&Number(p.price)>0&&Number(p.price)<Number(p.minPrice)).length;
+      const red=sellerProducts.filter(p=>String(p.priceIndexColor||'').toUpperCase()==='RED').length;
+      document.getElementById('sellerTotal').textContent=String(sellerProducts.length);
+      document.getElementById('sellerAvgPrice').textContent=money(avg);
+      document.getElementById('sellerBelowMin').textContent=String(below);
+      document.getElementById('sellerRedIndex').textContent=String(red);
+      renderSellerProducts();
+      if(status){
+        status.className='status ok';
+        status.textContent='Подключено к Ozon: '+sellerProducts.length+' товаров. Цены не изменяются.'+(data.warning?' '+data.warning:'');
+      }
+    }catch(e){
+      sellerProducts=[];
+      renderSellerProducts();
+      if(status){status.className='status err';status.textContent='Не удалось загрузить магазин: '+(e?.message||e);}
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent='Обновить из Ozon';}
+    }
+  }
+
   function setLoadStatus(text, type=''){
     const box=document.getElementById('loadStatus');
     box.textContent=text; box.className='status'+(type?' '+type:'');
@@ -242,7 +348,9 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     if(Number.isFinite(Number(p.heightCm))&&Number(p.heightCm)>0) el.height.value=Number(p.heightCm).toFixed(1).replace(/\.0$/,'');
     if(Number.isFinite(Number(p.weightKg))&&Number(p.weightKg)>0) el.weight.value=Number(p.weightKg).toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
     autoProductMeta={category:p.category||'',seller:p.seller||'',rating:p.rating?String(p.rating):'',source:data?.source||'Ozon'};
-    renderMeta(); render();
+    document.getElementById('sellerRefreshBtn')?.addEventListener('click',loadSellerProducts);
+  document.getElementById('sellerSearch')?.addEventListener('input',renderSellerProducts);
+  renderMeta(); render(); loadSellerProducts();
     const found=[]; if(p.name)found.push('название'); if(p.price)found.push('цену'); if(p.weightKg)found.push('вес'); if(p.lengthCm||p.widthCm||p.heightCm)found.push('габариты');
     let msg='Карточка загружена'; if(found.length)msg+=': '+found.join(', ')+'.'; else msg+=' частично.';
     if(data?.warning) msg+=' '+data.warning;
