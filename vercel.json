@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/bath-daily.js": {
+      "maxDuration": 60
+    },
+    "api/bath-finance.js": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/bath-daily",
+      "schedule": "5 2 * * *"
+    }
+  ]
+}
