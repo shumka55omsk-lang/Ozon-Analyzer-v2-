@@ -8,9 +8,11 @@ function send(res,status,body){
   res.end(JSON.stringify(body));
 }
 
-async function ozonPost(path,body){
+async function ozonPost(path,body,kind='finance'){
   const clientId=process.env.OZON_CLIENT_ID;
-  const apiKey=process.env.OZON_API_KEY;
+  const apiKey=kind==='product'
+    ? process.env.OZON_API_KEY
+    : (process.env.OZON_FINANCE_API_KEY||process.env.OZON_API_KEY);
   if(!clientId||!apiKey){
     const e=new Error('Не настроены OZON_CLIENT_ID / OZON_API_KEY'); e.status=500; throw e;
   }
@@ -42,7 +44,7 @@ function money(v){
 function r2(v){return Math.round((Number(v)||0)*100)/100}
 
 async function bathProducts(){
-  const data=await ozonPost('/v3/product/info/list',{product_id:BATH_PRODUCT_IDS});
+  const data=await ozonPost('/v3/product/info/list',{product_id:BATH_PRODUCT_IDS},'product');
   const items=data?.items||data?.result?.items||[];
   return items.map(x=>({
     productId:String(x?.id??x?.product_id??''),
