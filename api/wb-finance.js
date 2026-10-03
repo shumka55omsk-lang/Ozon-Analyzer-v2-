@@ -7,6 +7,13 @@ function send(res,status,body){
   res.setHeader('Cache-Control','public, s-maxage=43200, stale-while-revalidate=86400');
   res.end(JSON.stringify(body));
 }
+function requireCronAuth(req){
+  const secret=process.env.CRON_SECRET;
+  const auth=String(req.headers?.authorization||'');
+  if(!secret||auth!=='Bearer '+secret){
+    const e=new Error('Unauthorized');e.status=401;throw e;
+  }
+}
 function token(){
   const t=process.env.WB_READ_API_TOKEN;
   if(!t){const e=new Error('Не настроен WB_READ_API_TOKEN');e.status=500;throw e;}
@@ -43,6 +50,7 @@ function add(map,key,val){
 module.exports=async function handler(req,res){
   if(req.method!=='GET') return send(res,405,{ok:false,error:'Используйте GET'});
   try{
+    requireCronAuth(req);
     const now=new Date();
     const to=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-1));
     const from=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-14));
