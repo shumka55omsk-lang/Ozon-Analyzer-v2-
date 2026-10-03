@@ -99,7 +99,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
       <h1>Управление ценами маркетплейсов</h1>
       <p>Ozon + Wildberries: экономика, динамика продаж и безопасное изменение цен.</p>
     </div>
-    <div class="badge">Ozon + Wildberries</div>
+    <div class="badge">Ozon + Wildberries + Яндекс Маркет</div>
   </div>
 
   <section class="card seller-card">
@@ -165,6 +165,33 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     </div>
     <div class="note seller-economy-note">
       После подключения токена система сопоставит сидушки WB с Ozon, затем добавим реальные финансовые удержания WB и общий алгоритм автоцены. Никакие данные Wildberries сейчас не изменяются.
+    </div>
+  </section>
+
+  <section class="card seller-card" id="ymSection">
+    <div class="seller-head">
+      <div>
+        <h2 style="margin-bottom:4px">Яндекс Маркет — сидушки для бани</h2>
+        <div class="small">Только чтение: товары, цены и заказы за вчера. Автоцена Яндекс Маркета пока отключена.</div>
+      </div>
+      <div class="readonly-badge">Маркет · только чтение</div>
+    </div>
+    <div class="seller-actions">
+      <input id="ymSearch" placeholder="Поиск по товару или SKU" />
+      <button id="ymRefreshBtn" class="primary" type="button">Обновить из Маркета</button>
+    </div>
+    <div id="ymStatus" class="status">Ожидаю подключение Яндекс Маркета…</div>
+    <div class="seller-summary">
+      <div class="kpi"><div class="l">Сидушек</div><div class="v" id="ymTotal">—</div></div>
+      <div class="kpi"><div class="l">Заказов вчера</div><div class="v" id="ymOrdersYesterday">—</div></div>
+      <div class="kpi"><div class="l">Штук вчера</div><div class="v" id="ymUnitsYesterday">—</div></div>
+      <div class="kpi"><div class="l">Выручка вчера</div><div class="v" id="ymRevenueYesterday">—</div></div>
+    </div>
+    <div id="ymRows" class="seller-list">
+      <div class="seller-empty">Для подключения нужен YANDEX_MARKET_API_KEY.</div>
+    </div>
+    <div class="note seller-economy-note">
+      Финансовые услуги и комиссии Яндекс Маркета подключим после проверки реальных заказов. Сейчас никаких данных в кабинете не изменяется.
     </div>
   </section>
 
@@ -643,6 +670,91 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     }
   }
 
+  let ymData={products:[],total:{},campaigns:[]};
+
+  function renderYm(){
+    const rows=document.getElementById('ymRows');
+    if(!rows) return;
+    const q=(document.getElementById('ymSearch')?.value||'').trim().toLowerCase();
+    const products=Array.isArray(ymData.products)?ymData.products:[];
+    const list=products.filter(p=>{
+      if(!q) return true;
+      return String(p.name||'').toLowerCase().includes(q) ||
+             String(p.offerId||'').toLowerCase().includes(q) ||
+             String(p.vendorCode||'').toLowerCase().includes(q);
+    });
+    document.getElementById('ymTotal').textContent=String(products.length);
+    document.getElementById('ymOrdersYesterday').textContent=String(Math.round(Number(ymData?.total?.orders||0)));
+    document.getElementById('ymUnitsYesterday').textContent=String(Math.round(Number(ymData?.total?.units||0)));
+    document.getElementById('ymRevenueYesterday').textContent=money(Number(ymData?.total?.revenue||0));
+
+    if(!list.length){
+      rows.innerHTML='<div class="seller-empty">Сидушки Яндекс Маркета не найдены.</div>';
+      return;
+    }
+
+    rows.innerHTML=list.map(p=>{
+      const stores=Array.isArray(p.stores)?p.stores:[];
+      const units=stores.reduce((s,x)=>s+Number(x?.yesterday?.units||0),0);
+      const revenue=stores.reduce((s,x)=>s+Number(x?.yesterday?.revenue||0),0);
+      const cancelled=stores.reduce((s,x)=>s+Number(x?.yesterday?.cancelledUnits||0),0);
+      const price=Number(p?.price?.value||0);
+      const old=Number(p?.price?.discountBase||0);
+      const img=(Array.isArray(p.pictures)&&p.pictures[0])?'<img src="'+escapeHtml(p.pictures[0])+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'';
+      const storeText=stores.map(s=>escapeHtml((s.domain||'магазин')+' · '+(s.placementType||''))).join(' / ');
+      return `<article class="seller-item">
+        <div class="seller-main">
+          <div class="seller-product">
+            <div class="seller-photo"><span>Нет фото</span>${img}</div>
+            <div class="seller-product-copy">
+              <b>${escapeHtml(p.name||'Сидушка для бани')}</b>
+              <small>SKU: ${escapeHtml(p.offerId||'—')}${p.marketSku?' · marketSku: '+escapeHtml(p.marketSku):''}</small>
+              <div class="seller-index">Яндекс Маркет · ${storeText||escapeHtml(p.categoryName||'')}</div>
+            </div>
+          </div>
+          <div class="seller-top-metric"><div class="mlabel">Текущая цена</div><div class="mvalue">${price?money(price):'—'}</div></div>
+          <div class="seller-top-metric"><div class="mlabel">Цена до скидки</div><div class="mvalue">${old?money(old):'—'}</div></div>
+          <div class="seller-top-metric"><div class="mlabel">Штук вчера</div><div class="mvalue">${units}</div></div>
+          <div><span class="status-chip good">Только чтение</span></div>
+        </div>
+        <div class="seller-economy-grid">
+          <div class="seller-metric"><div class="mlabel">Выручка вчера</div><div class="mvalue">${money(revenue)}</div></div>
+          <div class="seller-metric"><div class="mlabel">Отменено, шт.</div><div class="mvalue">${cancelled}</div></div>
+          <div class="seller-metric"><div class="mlabel">Категория</div><div class="mvalue" style="font-size:14px">${escapeHtml(p.categoryName||'—')}</div></div>
+          <div class="seller-metric"><div class="mlabel">Обновление цены</div><div class="mvalue" style="font-size:14px">${escapeHtml(p?.price?.updatedAt?new Date(p.price.updatedAt).toLocaleString('ru-RU'):'—')}</div></div>
+        </div>
+      </article>`;
+    }).join('');
+  }
+
+  async function loadYm(){
+    const status=document.getElementById('ymStatus');
+    const btn=document.getElementById('ymRefreshBtn');
+    if(btn){btn.disabled=true;btn.textContent='Обновляю…';}
+    if(status){status.className='status';status.textContent='Получаю данные Яндекс Маркета…';}
+    try{
+      const r=await fetch('/api/yandex-market',{headers:{Accept:'application/json'},cache:'no-store'});
+      const d=await r.json().catch(()=>({ok:false,error:'Некорректный ответ Яндекс Маркета'}));
+      if(!r.ok||!d.ok) throw new Error(d.error||('Яндекс Маркет HTTP '+r.status));
+      ymData=d;
+      renderYm();
+      if(status){
+        status.className='status ok';
+        const shops=(d.campaigns||[]).length;
+        status.textContent='Яндекс Маркет подключён: '+shops+' магазин(а), '+(d.products||[]).length+' сидушек. Режим только чтение.';
+      }
+    }catch(e){
+      ymData={products:[],total:{},campaigns:[]};
+      renderYm();
+      if(status){
+        status.className='status warn';
+        status.textContent='Яндекс Маркет ещё не подключён: '+(e?.message||e);
+      }
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent='Обновить из Маркета';}
+    }
+  }
+
   function setLoadStatus(text, type=''){
     const box=document.getElementById('loadStatus');
     box.textContent=text; box.className='status'+(type?' '+type:'');
@@ -882,7 +994,9 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   document.getElementById('sellerScheme')?.addEventListener('change',renderSellerProducts);
   document.getElementById('wbRefreshBtn')?.addEventListener('click',loadWb);
   document.getElementById('wbSearch')?.addEventListener('input',renderWbProducts);
-  renderMeta(); render(); loadSellerProducts(); loadWb();
+  document.getElementById('ymRefreshBtn')?.addEventListener('click',loadYm);
+  document.getElementById('ymSearch')?.addEventListener('input',renderYm);
+  renderMeta(); render(); loadSellerProducts(); loadWb(); loadYm();
 })();
 </script>
 </body>
