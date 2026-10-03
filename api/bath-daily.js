@@ -69,7 +69,7 @@ async function ozonWrite(path,body){
 async function telegram(text){
   const token=process.env.TELEGRAM_BOT_TOKEN;
   const chatId=process.env.TELEGRAM_CHAT_ID;
-  if(!token||!chatId) return {sent:false,reason:'TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID не настроены'};
+  if(!token||!chatId) throw new Error('TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID не настроены в этом Vercel-проекте');
   const r=await fetch('https://api.telegram.org/bot'+token+'/sendMessage',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
