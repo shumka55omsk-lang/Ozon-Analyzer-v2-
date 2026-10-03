@@ -199,7 +199,7 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
   };
 }
 
-function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalytics){
+function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalytics,ym){
   const lines=[
     'Маркетплейсы — сидушки для бани · '+date,
     'Ozon: '+mode,
@@ -235,7 +235,24 @@ function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalyti
   }else{
     lines.push('WB: аналитика временно недоступна; Ozon-автоматика продолжает работать.','');
   }
-  lines.push('Автоматика Ozon затрагивает только 4 SKU сидушек. WB пока только чтение. Остальные товары исключены.');
+  lines.push('ЯНДЕКС МАРКЕТ');
+  if(ym?.ok){
+    lines.push(
+      'Заказы вчера: '+n(ym?.total?.orders)+' · штук: '+n(ym?.total?.units)+' · выручка: '+rub(ym?.total?.revenue),
+      'Отменено, шт.: '+n(ym?.total?.cancelledUnits)
+    );
+    for(const p of (ym.products||[]).slice(0,6)){
+      const units=(p.stores||[]).reduce((s,x)=>s+n(x?.yesterday?.units),0);
+      const revenue=(p.stores||[]).reduce((s,x)=>s+n(x?.yesterday?.revenue),0);
+      lines.push(
+        (p.name||p.offerId||'Сидушка')+': '+units+' шт. · '+rub(revenue)+' · цена '+(n(p?.price?.value)?rub(p.price.value):'—')
+      );
+    }
+    lines.push('Решение: наблюдение — автоцена Яндекс Маркета пока отключена.','');
+  }else{
+    lines.push('Яндекс Маркет: ещё не подключён или временно недоступен.','');
+  }
+  lines.push('Автоматика Ozon затрагивает только 4 SKU сидушек. WB и Яндекс Маркет пока только чтение. Остальные товары исключены.');
   return lines.join('\n').slice(0,3900);
 }
 
@@ -246,13 +263,14 @@ module.exports=async function handler(req,res){
   if(!secret||auth!=='Bearer '+secret) return send(res,401,{ok:false,error:'Unauthorized'});
 
   try{
-    const [seller,finance,analytics,promos,search,wbAnalytics]=await Promise.all([
+    const [seller,finance,analytics,promos,search,wbAnalytics,ym]=await Promise.all([
       jsonGet(APP_BASE+'/api/seller-products'),
       jsonGet(APP_BASE+'/api/bath-finance'),
       jsonGet(APP_BASE+'/api/bath-analytics'),
       jsonGet(APP_BASE+'/api/bath-promos'),
       jsonGet(APP_BASE+'/api/bath-search').catch(e=>({ok:false,error:e?.message||String(e)})),
-      jsonGet(APP_BASE+'/api/wb-analytics').catch(e=>({ok:false,error:e?.message||String(e),items:[]}))
+      jsonGet(APP_BASE+'/api/wb-analytics').catch(e=>({ok:false,error:e?.message||String(e),items:[]})),
+      jsonGet(APP_BASE+'/api/yandex-market').catch(e=>({ok:false,error:e?.message||String(e),products:[],total:{}}))
     ]);
 
     const products=(seller.products||[]).filter(p=>BATH_IDS.has(String(p.productId)));
@@ -308,7 +326,7 @@ module.exports=async function handler(req,res){
 
     const date=analytics.dateTo||new Date(Date.now()-86400000).toISOString().slice(0,10);
     const mode=autoprice&&hasWriteKey?'АВТОЦЕНА ВКЛ':'наблюдение / без записи';
-    const report=buildReport(date,decisions,mode,promoRemoved,!search?.ok,wbAnalytics);
+    const report=buildReport(date,decisions,mode,promoRemoved,!search?.ok,wbAnalytics,ym);
     const tg=await telegram(report);
 
     return send(res,200,{
@@ -323,6 +341,8 @@ module.exports=async function handler(req,res){
       writes,
       wbAnalyticsOk:!!wbAnalytics?.ok,
       wbItems:Array.isArray(wbAnalytics?.items)?wbAnalytics.items.length:0,
+      yandexMarketOk:!!ym?.ok,
+      yandexMarketItems:Array.isArray(ym?.products)?ym.products.length:0,
       telegram:tg,
       report
     });
