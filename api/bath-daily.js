@@ -241,14 +241,6 @@ function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalyti
 
 module.exports=async function handler(req,res){
   if(req.method!=='GET') return send(res,405,{ok:false,error:'Используйте GET'});
-  if(String(req.query?.telegram_test||'')==='tg-check-20261003'){
-    try{
-      const tg=await telegram('Тест Marketplace Repricer: Telegram подключён. Утренние отчёты Ozon + Wildberries готовы к отправке.');
-      return send(res,200,{ok:true,telegram:tg});
-    }catch(e){
-      return send(res,500,{ok:false,error:e?.message||String(e)});
-    }
-  }
   const secret=process.env.CRON_SECRET;
   const auth=String(req.headers?.authorization||'');
   if(!secret||auth!=='Bearer '+secret) return send(res,401,{ok:false,error:'Unauthorized'});
