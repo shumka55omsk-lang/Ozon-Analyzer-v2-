@@ -442,7 +442,7 @@ module.exports=async function handler(req,res){
       jsonGet(APP_BASE+'/api/bath-search').catch(e=>({ok:false,error:e?.message||String(e)})),
       jsonGet(APP_BASE+'/api/wb-analytics').catch(e=>({ok:false,error:e?.message||String(e),items:[]})),
       jsonGet(APP_BASE+'/api/wb-products').catch(e=>({ok:false,error:e?.message||String(e),products:[]})),
-      jsonGet(APP_BASE+'/api/wb-finance').catch(e=>({ok:false,error:e?.message||String(e),items:[]})),
+      jsonGetCron(APP_BASE+'/api/wb-finance').catch(e=>({ok:false,error:e?.message||String(e),items:[]})),
       jsonGet(APP_BASE+'/api/yandex-market').catch(e=>({ok:false,error:e?.message||String(e),products:[],total:{}}))
     ]);
 
