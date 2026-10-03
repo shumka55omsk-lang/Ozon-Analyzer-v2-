@@ -250,7 +250,10 @@ module.exports=async function handler(req,res){
         }
       }
       const perSku={};
-      for(const sku of bath) perSku[sku]={sku,rows:0,costs:0,serviceBreakdown:{},merchantPrice:0,buyerPaid:0};
+      for(const sku of bath) perSku[sku]={
+        sku,rows:0,costs:0,serviceBreakdown:{},merchantPrice:0,buyerPaid:0,
+        placementUnits:0,placementRevenue:0,uniqueOrders:new Set()
+      };
       const files=[];
       for(const d of docs){
         let matched=0,costs=0;
@@ -260,14 +263,22 @@ module.exports=async function handler(req,res){
           if(!bath.has(sku)&&order&&orderToSkus.get(order)?.size===1) sku=[...orderToSkus.get(order)][0];
           if(!bath.has(sku)) continue;
           matched++;
+          const totalAmount=safeNum(o.totalAmount);
           const service=safeNum(o.servicePrice);
           const full=safeNum(o.fullPrice);
-          const cost=Math.abs(service||full||0);
+          const cost=Math.abs(totalAmount||service||full||0);
           const bucket=perSku[sku];
           bucket.rows++;
           bucket.costs+=cost;
           bucket.merchantPrice+=safeNum(o.merchantPrice);
           bucket.buyerPaid+=safeNum(o.buyerPaid);
+          if(order) bucket.uniqueOrders.add(order);
+          const fileKey=d.name.replace(/\.json$/i,'');
+          if(fileKey==='placement'){
+            const qty=Math.max(0,safeNum(o.count))||1;
+            bucket.placementUnits+=qty;
+            bucket.placementRevenue+=safeNum(o.price)*qty;
+          }
           const key=d.name.replace(/\.json$/i,'');
           bucket.serviceBreakdown[key]=(bucket.serviceBreakdown[key]||0)+cost;
           costs+=cost;
@@ -278,6 +289,12 @@ module.exports=async function handler(req,res){
         b.costs=Math.round(b.costs*100)/100;
         b.merchantPrice=Math.round(b.merchantPrice*100)/100;
         b.buyerPaid=Math.round(b.buyerPaid*100)/100;
+        b.placementRevenue=Math.round(b.placementRevenue*100)/100;
+        b.uniqueOrders=b.uniqueOrders.size;
+        b.avgServiceCostPerUnit=b.placementUnits?Math.round(b.costs/b.placementUnits*100)/100:0;
+        b.avgPlacementRevenuePerUnit=b.placementUnits?Math.round(b.placementRevenue/b.placementUnits*100)/100:0;
+        b.estimatedProfitPerUnit=b.placementUnits?Math.round((b.placementRevenue/b.placementUnits-b.costs/b.placementUnits-55)*100)/100:0;
+        b.safePriceFor200=b.placementUnits?Math.ceil((55+200+b.costs/b.placementUnits)/10)*10:0;
         b.serviceBreakdown=Object.entries(b.serviceBreakdown)
           .map(([name,value])=>({name,value:Math.round(value*100)/100}))
           .sort((a,b)=>b.value-a.value);
