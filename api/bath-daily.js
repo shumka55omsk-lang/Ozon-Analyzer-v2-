@@ -6,6 +6,7 @@ const COGS=55;
 const PRICE_STEP=0.05;
 const CHANGE_WEEKDAYS=new Set([1,3,5]); // Mon/Wed/Fri in Omsk morning run
 const ELASTIC_BOOSTING_ACTION_ID=1977747;
+const UNIFIED_DRY_RUN=true; // Hard safety lock: no marketplace writes while validating recommendations.
 
 function send(res,status,body){
   res.statusCode=status;
@@ -207,7 +208,10 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
     }else reason='Целевая прибыль защищена; текущую цену сохраняем.';
   }
 
+  const recommendedPrice=action==='HOLD'?effective:newPrice;
+  const recommendedProfit=recommendedPrice-(recommendedPrice*commissionPct/100)-(recommendedPrice*acquiringRate)-fixed-COGS;
   return {
+    marketplace:'Ozon',
     productId:String(p.productId),
     offerId:String(p.offerId||''),
     name:p.name,
@@ -225,14 +229,146 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
     trendPct:a.baselineOrders>0?r2((a.recentOrders/a.baselineOrders-1)*100):0,
     action,
     newPrice:r2(newPrice),
+    recommendedPrice:r2(recommendedPrice),
+    recommendedProfit:r2(recommendedProfit),
     reason
   };
 }
 
-function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalytics,ym,ymFinance){
+
+function genericPriceDecision({
+  marketplace,id,name,current,safe,currentProfit,baseline,recent,hasOwnFinance,financeUnits,changeDay,extraHoldReason=''
+}){
+  current=n(current); safe=n(safe); currentProfit=n(currentProfit);
+  baseline=n(baseline); recent=n(recent);
+  const ratio=baseline>0?recent/baseline:0;
+  const enoughTrend=baseline>=3;
+  let action='HOLD',recommended=current,reason='';
+
+  if(!current){
+    reason='Нет свежей цены — изменение запрещено.';
+  }else if(!hasOwnFinance){
+    reason=extraHoldReason||'Нет собственной достаточной финансовой выборки — только наблюдение.';
+  }else if(financeUnits<3){
+    reason='Финансовая выборка слишком мала ('+financeUnits+' шт.) — только наблюдение.';
+  }else if(!enoughTrend){
+    reason=extraHoldReason||'Недостаточно данных по динамике продаж для безопасного изменения.';
+  }else if(!changeDay){
+    reason='День наблюдения: сегодня только расчёт, без шага цены.';
+  }else if(current<safe&&ratio>=0.80){
+    recommended=Math.min(safe,round10(current*(1+PRICE_STEP)));
+    if(recommended>current){
+      action='RAISE';
+      reason='Продажи стабильны, цена ниже защитного уровня.';
+    }else reason='Цена уже у защитного уровня.';
+  }else if(current<safe&&ratio<0.80){
+    reason='Продажи просели — повышение цены заморожено.';
+  }else if(current>=safe&&ratio<0.60&&current>safe){
+    recommended=Math.max(safe,Math.floor((current*(1-PRICE_STEP))/10)*10);
+    if(recommended<current){
+      action='LOWER';
+      reason='Цена выше защитного уровня и продажи заметно просели; dry-run предлагает один шаг вниз.';
+    }else reason='Ниже защитной цены опускаться нельзя.';
+  }else{
+    reason='Целевая прибыль защищена; текущую цену сохраняем.';
+  }
+
+  const expectedProfit=current>0&&safe>0&&currentProfit!==0
+    ?currentProfit
+    :0;
+  return {
+    marketplace,id:String(id||''),name:String(name||''),current:r2(current),safe:r2(safe),
+    currentProfit:r2(currentProfit),recommended:r2(recommended),expectedProfit:r2(expectedProfit),
+    baseline:r2(baseline),recent:r2(recent),trendPct:baseline>0?r2((ratio-1)*100):0,
+    action,reason,financeUnits:n(financeUnits)
+  };
+}
+
+function wbDryRun(wbProducts,wbAnalytics,wbFinance,changeDay){
+  const products=Array.isArray(wbProducts?.products)?wbProducts.products:[];
+  const analyticsMap=Object.fromEntries((wbAnalytics?.items||[]).map(x=>[String(x.nmID||''),x]));
+  const financeMap=Object.fromEntries((wbFinance?.items||[]).map(x=>[String(x.nmID||''),x]));
+  const reliable=(wbFinance?.items||[]).filter(x=>n(x.saleUnits)>=5&&n(x.variableRetention)>0);
+  const fallback=reliable.sort((a,b)=>n(b.saleUnits)-n(a.saleUnits))[0]||null;
+
+  return products.map(p=>{
+    const id=String(p.nmID||'');
+    const a=wbSummary(analyticsMap[id]||{nmID:id,history:[]});
+    const own=financeMap[id];
+    const ownReliable=!!(own&&n(own.saleUnits)>=3&&n(own.variableRetention)>0);
+    const sample=ownReliable?own:fallback;
+    const current=p.priceLoaded?n(p.discountedPrice||p.basePrice):0;
+    const retention=n(sample?.variableRetention);
+    const fixed=n(sample?.fixedMarketplaceCostPerSale);
+    const safe=sample&&retention>0?round10((COGS+TARGET_PROFIT+fixed)/retention):0;
+    const profit=current&&sample&&retention>0?current*retention-fixed-COGS:0;
+    const d=genericPriceDecision({
+      marketplace:'Wildberries',
+      id,
+      name:p.title||p.vendorCode||id,
+      current,safe,currentProfit:profit,
+      baseline:a.baseline,recent:a.recent,
+      hasOwnFinance:ownReliable,
+      financeUnits:n(own?.saleUnits),
+      changeDay,
+      extraHoldReason:sample&&!ownReliable
+        ?'Экономика рассчитана по ориентиру другой сидушки; для автошага нужна собственная выборка.'
+        :'Недостаточно собственной финансовой выборки.'
+    });
+    if(d.recommended&&sample&&retention>0) d.expectedProfit=r2(d.recommended*retention-fixed-COGS);
+    d.vendorCode=String(p.vendorCode||'');
+    d.priceLoaded=!!p.priceLoaded;
+    d.financeSource=ownReliable?'own':(sample?'fallback':'none');
+    return d;
+  });
+}
+
+function ymDryRun(ym,ymFinance,changeDay){
+  const financeRows=Array.isArray(ymFinance?.perSku)?ymFinance.perSku:[];
+  const financeMap=Object.fromEntries(financeRows.map(x=>[String(x.sku),x]));
+  const fallback=financeRows
+    .filter(x=>n(x.placementUnits)>=3&&n(x.variableRate)>=0&&n(x.variableRate)<1)
+    .sort((a,b)=>n(b.placementUnits)-n(a.placementUnits))[0]||null;
+
+  return (ym?.products||[]).map(p=>{
+    const id=String(p.offerId||'');
+    const own=financeMap[id];
+    const ownReliable=!!(own&&n(own.placementUnits)>=3&&n(own.variableRate)<1);
+    const sample=ownReliable?own:fallback;
+    const current=n(p?.price?.value);
+    const rate=n(sample?.variableRate);
+    const fixed=n(sample?.fixedCostPerUnit);
+    const safe=sample&&rate<1?round10((COGS+TARGET_PROFIT+fixed)/(1-rate)):0;
+    const profit=current&&sample&&rate<1?current*(1-rate)-fixed-COGS:0;
+    const histUnits=(p.stores||[]).reduce((s,x)=>s+n(x?.history14?.units),0);
+    const yUnits=(p.stores||[]).reduce((s,x)=>s+n(x?.yesterday?.units),0);
+
+    // Yandex currently has only sparse 14-day history, not a robust daily baseline.
+    // Keep HOLD even when economics are available; still show safe/current/projected profit.
+    const d=genericPriceDecision({
+      marketplace:'Яндекс Маркет',
+      id,
+      name:p.name||id,
+      current,safe,currentProfit:profit,
+      baseline:0,recent:0,
+      hasOwnFinance:ownReliable,
+      financeUnits:n(own?.placementUnits),
+      changeDay:false,
+      extraHoldReason:ownReliable
+        ?'Экономика рассчитана, но дневной истории пока недостаточно для автоматического шага цены.'
+        :(sample?'Используется финансовый ориентир другой сидушки; автошаг запрещён.':'Нет финансовой выборки.')
+    });
+    d.history14Units=r2(histUnits);
+    d.yesterdayUnits=r2(yUnits);
+    d.financeSource=ownReliable?'own':(sample?'fallback':'none');
+    return d;
+  });
+}
+
+function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalytics,ym,ymFinance,wbDecisions,ymDecisions){
   const lines=[
     'Маркетплейсы — сидушки для бани · '+date,
-    'Ozon: '+mode,
+    'Режим: ЕДИНЫЙ DRY-RUN · без изменения цен',
     'Цель: не менее '+TARGET_PROFIT+' ₽ прибыли/шт.',
     '',
     'OZON'
@@ -241,9 +377,10 @@ function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalyti
     const arrow=d.action==='RAISE'?' ↑':d.action==='LOWER'?' ↓':'';
     lines.push(
       d.color+': '+d.yesterdayOrders+' заказ(ов) вчера · '+rub(d.yesterdayRevenue),
-      'Цена: '+rub(d.effective)+' · защита ≈ '+rub(d.safeFloor)+' · прибыль ≈ '+rub(d.currentProfit),
+      'Цена: '+rub(d.effective)+' → '+rub(d.recommendedPrice)+' · защита ≈ '+rub(d.safeFloor),
+      'Прибыль: сейчас ≈ '+rub(d.currentProfit)+' · при рекомендации ≈ '+rub(d.recommendedProfit),
       '2 дня к фону: '+(d.baselineOrders>0?(d.trendPct>=0?'+':'')+d.trendPct+'%':'нет базы'),
-      'Решение: '+d.action+arrow+(d.newPrice!==d.currentBase?' → '+rub(d.newPrice):'')+' — '+d.reason,
+      'DRY-RUN: '+d.action+arrow+' — '+d.reason,
       ''
     );
   }
@@ -251,19 +388,18 @@ function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalyti
   if(analyticsLimited) lines.push('Примечание Ozon: поисковые позиции недоступны без Premium; контроль ведётся по заказам/выручке и экономике.','');
 
   lines.push('WILDBERRIES');
-  if(wbAnalytics?.ok&&Array.isArray(wbAnalytics.items)&&wbAnalytics.items.length){
-    for(const item of wbAnalytics.items){
-      const w=wbSummary(item);
+  if(Array.isArray(wbDecisions)&&wbDecisions.length){
+    for(const d of wbDecisions){
       lines.push(
-        'WB '+(w.vendorCode||w.nmID)+': '+w.orders+' заказ(ов) вчера · '+rub(w.revenue),
-        'Переходы: '+w.opens+' · корзины: '+w.carts+' · корзина→заказ: '+(w.cartToOrder?pct(w.cartToOrder)+'%':'—'),
-        '2 дня к фону: '+(w.baseline>0?(w.trendPct>=0?'+':'')+w.trendPct+'%':'нет базы'),
-        'Решение: наблюдение — автоцена WB пока отключена.',
+        'WB '+(d.vendorCode||d.id)+': цена '+(d.current?rub(d.current):'—')+' → '+(d.recommended?rub(d.recommended):'—')+' · защита '+(d.safe?rub(d.safe):'—'),
+        'Прибыль: '+(d.current?rub(d.currentProfit):'—')+' → '+(d.recommended?rub(d.expectedProfit):'—'),
+        '2 дня к фону: '+(d.baseline>0?(d.trendPct>=0?'+':'')+d.trendPct+'%':'нет базы'),
+        'DRY-RUN: '+d.action+' — '+d.reason,
         ''
       );
     }
   }else{
-    lines.push('WB: аналитика временно недоступна; Ozon-автоматика продолжает работать.','');
+    lines.push('WB: нет свежих данных для dry-run; никаких изменений не выполняется.','');
   }
   lines.push('ЯНДЕКС МАРКЕТ');
   if(ym?.ok){
@@ -271,34 +407,23 @@ function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalyti
       'Заказы вчера: '+n(ym?.total?.orders)+' · штук: '+n(ym?.total?.units)+' · выручка: '+rub(ym?.total?.revenue),
       'Отменено, шт.: '+n(ym?.total?.cancelledUnits)
     );
-    const financeRows=Array.isArray(ymFinance?.perSku)?ymFinance.perSku:[];
-    const financeMap=Object.fromEntries(financeRows.map(x=>[String(x.sku),x]));
-    const fallback=financeMap['30092025']&&n(financeMap['30092025'].placementUnits)>0?financeMap['30092025']:null;
-    for(const p of (ym.products||[]).slice(0,6)){
-      const units=(p.stores||[]).reduce((s,x)=>s+n(x?.yesterday?.units),0);
-      const revenue=(p.stores||[]).reduce((s,x)=>s+n(x?.yesterday?.revenue),0);
-      const own=financeMap[String(p.offerId||'')];
-      const sample=own&&n(own.placementUnits)>0?own:fallback;
-      const current=n(p?.price?.value);
-      let econ='финансы: нет выборки';
-      if(sample&&current>0){
-        const rate=n(sample.variableRate);
-        const fixed=n(sample.fixedCostPerUnit);
-        const safe=rate<1?round10((COGS+TARGET_PROFIT+fixed)/(1-rate)):0;
-        const profit=current*(1-rate)-fixed-COGS;
-        econ='защита ≈ '+rub(safe)+' · прибыль ≈ '+rub(profit)+(sample===own?'':' · ориентир по серой');
+    if(Array.isArray(ymDecisions)&&ymDecisions.length){
+      for(const d of ymDecisions){
+        lines.push(
+          (d.name||d.id)+': '+d.yesterdayUnits+' шт. вчера · цена '+(d.current?rub(d.current):'—')+' → '+(d.recommended?rub(d.recommended):'—'),
+          'Защита: '+(d.safe?rub(d.safe):'—')+' · прибыль '+(d.current?rub(d.currentProfit):'—')+' → '+(d.recommended?rub(d.expectedProfit):'—'),
+          'DRY-RUN: '+d.action+' — '+d.reason,
+          ''
+        );
       }
-      lines.push(
-        (p.name||p.offerId||'Сидушка')+': '+units+' шт. · '+rub(revenue)+' · цена '+(current?rub(current):'—'),
-        econ
-      );
+    }else{
+      lines.push('Нет данных для расчёта рекомендаций по товарам.','');
     }
     if(!ymFinance?.ok) lines.push('Финансы Яндекс Маркета: '+String(ymFinance?.error||'временно недоступны').slice(0,180));
-    lines.push('Решение: наблюдение — автоцена Яндекс Маркета пока отключена.','');
   }else{
     lines.push('Яндекс Маркет: ещё не подключён или временно недоступен.','');
   }
-  lines.push('Автоматика Ozon затрагивает только 4 SKU сидушек. WB и Яндекс Маркет пока только чтение. Остальные товары исключены.');
+  lines.push('ИТОГ: единый dry-run активен. Ни Ozon, ни WB, ни Яндекс Маркет этим циклом цены не изменяют. Остальные товары исключены.');
   return lines.join('\n').slice(0,3900);
 }
 
@@ -309,13 +434,15 @@ module.exports=async function handler(req,res){
   if(!secret||auth!=='Bearer '+secret) return send(res,401,{ok:false,error:'Unauthorized'});
 
   try{
-    const [seller,finance,analytics,promos,search,wbAnalytics,ym]=await Promise.all([
+    const [seller,finance,analytics,promos,search,wbAnalytics,wbProducts,wbFinance,ym]=await Promise.all([
       jsonGet(APP_BASE+'/api/seller-products'),
       jsonGet(APP_BASE+'/api/bath-finance'),
       jsonGet(APP_BASE+'/api/bath-analytics'),
       jsonGet(APP_BASE+'/api/bath-promos'),
       jsonGet(APP_BASE+'/api/bath-search').catch(e=>({ok:false,error:e?.message||String(e)})),
       jsonGet(APP_BASE+'/api/wb-analytics').catch(e=>({ok:false,error:e?.message||String(e),items:[]})),
+      jsonGet(APP_BASE+'/api/wb-products').catch(e=>({ok:false,error:e?.message||String(e),products:[]})),
+      jsonGet(APP_BASE+'/api/wb-finance').catch(e=>({ok:false,error:e?.message||String(e),items:[]})),
       jsonGet(APP_BASE+'/api/yandex-market').catch(e=>({ok:false,error:e?.message||String(e),products:[],total:{}}))
     ]);
 
@@ -334,7 +461,7 @@ module.exports=async function handler(req,res){
 
     let promoRemoved=false;
     let promoResult=null;
-    if(managePromos&&hasWriteKey&&promoSet.size){
+    if(!UNIFIED_DRY_RUN&&managePromos&&hasWriteKey&&promoSet.size){
       try{
         promoResult=await ozonWrite('/v1/actions/products/deactivate',{
           action_id:ELASTIC_BOOSTING_ACTION_ID,
@@ -353,7 +480,7 @@ module.exports=async function handler(req,res){
     ));
 
     const writes=[];
-    if(autoprice&&hasWriteKey&&!promoRemoved){
+    if(!UNIFIED_DRY_RUN&&autoprice&&hasWriteKey&&!promoRemoved){
       for(const d of decisions){
         if(!['RAISE','LOWER'].includes(d.action)||d.newPrice===d.currentBase) continue;
         const p=products.find(x=>String(x.productId)===d.productId);
@@ -371,9 +498,11 @@ module.exports=async function handler(req,res){
       }
     }
 
+    const wbDecisions=wbDryRun(wbProducts,wbAnalytics,wbFinance,changeDay);
+    const ymDecisions=ymDryRun(ym,ymFinance,changeDay);
     const date=analytics.dateTo||new Date(Date.now()-86400000).toISOString().slice(0,10);
-    const mode=autoprice&&hasWriteKey?'АВТОЦЕНА ВКЛ':'наблюдение / без записи';
-    const report=buildReport(date,decisions,mode,promoRemoved,!search?.ok,wbAnalytics,ym,ymFinance);
+    const mode='ЕДИНЫЙ DRY-RUN / без записи';
+    const report=buildReport(date,decisions,mode,promoRemoved,!search?.ok,wbAnalytics,ym,ymFinance,wbDecisions,ymDecisions);
     const tg=await telegram(report);
 
     return send(res,200,{
@@ -384,7 +513,10 @@ module.exports=async function handler(req,res){
       fallbackFixed:r2(fallbackFixed),
       promoRemoved,
       promoResult,
+      unifiedDryRun:UNIFIED_DRY_RUN,
       decisions,
+      wbDecisions,
+      ymDecisions,
       writes,
       wbAnalyticsOk:!!wbAnalytics?.ok,
       wbItems:Array.isArray(wbAnalytics?.items)?wbAnalytics.items.length:0,
