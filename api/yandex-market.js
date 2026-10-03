@@ -6,6 +6,13 @@ function send(res,status,body){
   res.setHeader('Cache-Control','no-store');
   res.end(JSON.stringify(body));
 }
+function requireCronAuth(req){
+  const secret=process.env.CRON_SECRET;
+  const auth=String(req.headers?.authorization||'');
+  if(!secret||auth!=='Bearer '+secret){
+    const e=new Error('Unauthorized');e.status=401;throw e;
+  }
+}
 function token(){
   const t=process.env.YANDEX_MARKET_API_KEY;
   if(!t){const e=new Error('Не настроен YANDEX_MARKET_API_KEY');e.status=500;throw e;}
@@ -228,6 +235,7 @@ module.exports=async function handler(req,res){
     const businessId=Number(available[0]?.business?.id||0);
 
     if(String(req.query?.finance||'')==='parse' && String(req.query?.reportId||'')){
+      requireCronAuth(req);
       const reportId=encodeURIComponent(String(req.query.reportId));
       const info=await ym('/v2/reports/info/'+reportId+'?sourceType=SELLER');
       const file=String(info?.result?.file||'');
@@ -317,12 +325,14 @@ module.exports=async function handler(req,res){
     }
 
     if(String(req.query?.reportId||'')){
+      requireCronAuth(req);
       const reportId=encodeURIComponent(String(req.query.reportId));
       const info=await ym('/v2/reports/info/'+reportId+'?sourceType=SELLER');
       return send(res,200,{ok:true,readOnly:true,report:info?.result||{}});
     }
 
     if(String(req.query?.finance||'')==='generate'){
+      requireCronAuth(req);
       const now=new Date();
       const to=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-1));
       const from=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-14));
