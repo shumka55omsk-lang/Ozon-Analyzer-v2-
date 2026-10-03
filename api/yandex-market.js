@@ -178,6 +178,36 @@ module.exports=async function handler(req,res){
     if(!available.length) return send(res,200,{ok:true,readOnly:true,authScopes,campaigns,products:[],warning:'Нет магазинов Яндекс Маркета с доступным API.'});
 
     const businessId=Number(available[0]?.business?.id||0);
+
+    if(String(req.query?.reportId||'')){
+      const reportId=encodeURIComponent(String(req.query.reportId));
+      const info=await ym('/v2/reports/info/'+reportId+'?sourceType=SELLER');
+      return send(res,200,{ok:true,readOnly:true,report:info?.result||{}});
+    }
+
+    if(String(req.query?.finance||'')==='generate'){
+      const now=new Date();
+      const to=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-1));
+      const from=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-14));
+      const body={
+        businessId,
+        dateFrom:dstr(from),
+        dateTo:dstr(to),
+        placementPrograms:[...new Set(available.map(c=>String(c.placementType||'')).filter(Boolean))],
+        campaignIds:available.map(c=>Number(c.id)).filter(Boolean)
+      };
+      const generated=await ym('/v2/reports/united-marketplace-services/generate?format=JSON&language=RU',{
+        method:'POST',body
+      });
+      return send(res,200,{
+        ok:true,
+        readOnly:true,
+        period:{from:dstr(from),to:dstr(to)},
+        reportId:String(generated?.result?.reportId||''),
+        estimatedGenerationTime:n(generated?.result?.estimatedGenerationTime)
+      });
+    }
+
     const catalog=businessId?await getBathCatalog(businessId):[];
     const offerIds=catalog.map(x=>x.offerId);
     const offerSet=new Set(offerIds);
