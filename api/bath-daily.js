@@ -43,6 +43,36 @@ async function jsonGet(url){
   if(!r.ok||!data.ok) throw new Error(data.error||('HTTP '+r.status));
   return data;
 }
+async function jsonGetCron(url,{allowPending=false}={}){
+  const secret=process.env.CRON_SECRET;
+  const r=await fetch(url,{
+    headers:{Accept:'application/json',Authorization:'Bearer '+secret},
+    cache:'no-store'
+  });
+  const data=await r.json().catch(()=>({ok:false,error:'Bad JSON'}));
+  if(allowPending&&r.status===409) return data;
+  if(!r.ok||!data.ok) throw new Error(data.error||('HTTP '+r.status));
+  return data;
+}
+function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
+async function loadYmFinance(){
+  try{
+    const g=await jsonGetCron(APP_BASE+'/api/yandex-market?finance=generate');
+    const id=String(g?.reportId||'');
+    if(!id) return {ok:false,error:'Яндекс Маркет не вернул reportId'};
+    for(let i=0;i<6;i++){
+      if(i) await sleep(1000);
+      const p=await jsonGetCron(
+        APP_BASE+'/api/yandex-market?finance=parse&reportId='+encodeURIComponent(id),
+        {allowPending:true}
+      );
+      if(p?.ok) return p;
+    }
+    return {ok:false,error:'Финансовый отчёт Яндекс Маркета не успел сформироваться'};
+  }catch(e){
+    return {ok:false,error:e?.message||String(e)};
+  }
+}
 async function ozonWrite(path,body){
   const clientId=process.env.OZON_CLIENT_ID;
   const apiKey=process.env.OZON_PRICE_API_KEY;
@@ -199,7 +229,7 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
   };
 }
 
-function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalytics,ym){
+function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalytics,ym,ymFinance){
   const lines=[
     'Маркетплейсы — сидушки для бани · '+date,
     'Ozon: '+mode,
@@ -241,13 +271,29 @@ function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalyti
       'Заказы вчера: '+n(ym?.total?.orders)+' · штук: '+n(ym?.total?.units)+' · выручка: '+rub(ym?.total?.revenue),
       'Отменено, шт.: '+n(ym?.total?.cancelledUnits)
     );
+    const financeRows=Array.isArray(ymFinance?.perSku)?ymFinance.perSku:[];
+    const financeMap=Object.fromEntries(financeRows.map(x=>[String(x.sku),x]));
+    const fallback=financeMap['30092025']&&n(financeMap['30092025'].placementUnits)>0?financeMap['30092025']:null;
     for(const p of (ym.products||[]).slice(0,6)){
       const units=(p.stores||[]).reduce((s,x)=>s+n(x?.yesterday?.units),0);
       const revenue=(p.stores||[]).reduce((s,x)=>s+n(x?.yesterday?.revenue),0);
+      const own=financeMap[String(p.offerId||'')];
+      const sample=own&&n(own.placementUnits)>0?own:fallback;
+      const current=n(p?.price?.value);
+      let econ='финансы: нет выборки';
+      if(sample&&current>0){
+        const rate=n(sample.variableRate);
+        const fixed=n(sample.fixedCostPerUnit);
+        const safe=rate<1?round10((COGS+TARGET_PROFIT+fixed)/(1-rate)):0;
+        const profit=current*(1-rate)-fixed-COGS;
+        econ='защита ≈ '+rub(safe)+' · прибыль ≈ '+rub(profit)+(sample===own?'':' · ориентир по серой');
+      }
       lines.push(
-        (p.name||p.offerId||'Сидушка')+': '+units+' шт. · '+rub(revenue)+' · цена '+(n(p?.price?.value)?rub(p.price.value):'—')
+        (p.name||p.offerId||'Сидушка')+': '+units+' шт. · '+rub(revenue)+' · цена '+(current?rub(current):'—'),
+        econ
       );
     }
+    if(!ymFinance?.ok) lines.push('Финансы Яндекс Маркета: '+String(ymFinance?.error||'временно недоступны').slice(0,180));
     lines.push('Решение: наблюдение — автоцена Яндекс Маркета пока отключена.','');
   }else{
     lines.push('Яндекс Маркет: ещё не подключён или временно недоступен.','');
@@ -273,6 +319,7 @@ module.exports=async function handler(req,res){
       jsonGet(APP_BASE+'/api/yandex-market').catch(e=>({ok:false,error:e?.message||String(e),products:[],total:{}}))
     ]);
 
+    const ymFinance=ym?.ok?await loadYmFinance():{ok:false,error:'Яндекс Маркет недоступен'};
     const products=(seller.products||[]).filter(p=>BATH_IDS.has(String(p.productId)));
     const finMap=Object.fromEntries((finance.items||[]).map(x=>[String(x.productId),x]));
     let reliable=(finance.items||[]).filter(x=>n(x.postingHits)>=5).map(x=>n(x.avgDeliveryAndOther));
@@ -326,7 +373,7 @@ module.exports=async function handler(req,res){
 
     const date=analytics.dateTo||new Date(Date.now()-86400000).toISOString().slice(0,10);
     const mode=autoprice&&hasWriteKey?'АВТОЦЕНА ВКЛ':'наблюдение / без записи';
-    const report=buildReport(date,decisions,mode,promoRemoved,!search?.ok,wbAnalytics,ym);
+    const report=buildReport(date,decisions,mode,promoRemoved,!search?.ok,wbAnalytics,ym,ymFinance);
     const tg=await telegram(report);
 
     return send(res,200,{
@@ -343,6 +390,8 @@ module.exports=async function handler(req,res){
       wbItems:Array.isArray(wbAnalytics?.items)?wbAnalytics.items.length:0,
       yandexMarketOk:!!ym?.ok,
       yandexMarketItems:Array.isArray(ym?.products)?ym.products.length:0,
+      yandexFinanceOk:!!ymFinance?.ok,
+      yandexFinanceItems:Array.isArray(ymFinance?.perSku)?ymFinance.perSku.length:0,
       telegram:tg,
       report
     });
