@@ -227,12 +227,6 @@ module.exports=async function handler(req,res){
 
     const businessId=Number(available[0]?.business?.id||0);
 
-    if(String(req.query?.reportId||'')){
-      const reportId=encodeURIComponent(String(req.query.reportId));
-      const info=await ym('/v2/reports/info/'+reportId+'?sourceType=SELLER');
-      return send(res,200,{ok:true,readOnly:true,report:info?.result||{}});
-    }
-
     if(String(req.query?.finance||'')==='parse' && String(req.query?.reportId||'')){
       const reportId=encodeURIComponent(String(req.query.reportId));
       const info=await ym('/v2/reports/info/'+reportId+'?sourceType=SELLER');
@@ -289,6 +283,12 @@ module.exports=async function handler(req,res){
           .sort((a,b)=>b.value-a.value);
       }
       return send(res,200,{ok:true,readOnly:true,files,perSku:Object.values(perSku)});
+    }
+
+    if(String(req.query?.reportId||'')){
+      const reportId=encodeURIComponent(String(req.query.reportId));
+      const info=await ym('/v2/reports/info/'+reportId+'?sourceType=SELLER');
+      return send(res,200,{ok:true,readOnly:true,report:info?.result||{}});
     }
 
     if(String(req.query?.finance||'')==='generate'){
