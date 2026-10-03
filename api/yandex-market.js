@@ -121,14 +121,14 @@ function orderIsCancelled(status){
   return String(status||'').startsWith('CANCELLED')||String(status||'')==='RETURNED';
 }
 
-async function getYesterdayOrders(campaignId,offerSet,date){
+async function getOrdersPeriod(campaignId,offerSet,dateFrom,dateTo){
   let pageToken='',orders=0,units=0,revenue=0,cancelledUnits=0,commission=0;
   const byOffer={};
   for(let i=0;i<30;i++){
     const q=new URLSearchParams({limit:'200'});
     if(pageToken) q.set('pageToken',pageToken);
     const data=await ym('/v2/campaigns/'+campaignId+'/stats/orders?'+q.toString(),{
-      method:'POST',body:{dateFrom:date,dateTo:date}
+      method:'POST',body:{dateFrom,dateTo}
     });
     const part=data?.result?.orders||[];
     for(const order of part){
@@ -187,18 +187,23 @@ module.exports=async function handler(req,res){
     const now=new Date();
     const y=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-1));
     const yesterday=dstr(y);
+    const h=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-14));
+    const historyFrom=dstr(h);
     const campaignData=[];
     for(const c of available){
       const prices=await getCampaignPrices(c.id,offerIds);
       let stats={orders:0,units:0,revenue:0,cancelledUnits:0,commission:0,byOffer:{}};
-      try{stats=await getYesterdayOrders(c.id,offerSet,yesterday)}catch(e){stats.error=e?.message||String(e)}
+      let history={orders:0,units:0,revenue:0,cancelledUnits:0,commission:0,byOffer:{}};
+      try{stats=await getOrdersPeriod(c.id,offerSet,yesterday,yesterday)}catch(e){stats.error=e?.message||String(e)}
+      try{history=await getOrdersPeriod(c.id,offerSet,historyFrom,yesterday)}catch(e){history.error=e?.message||String(e)}
       campaignData.push({
         campaignId:Number(c.id),
         domain:String(c.domain||''),
         placementType:String(c.placementType||''),
         businessId:Number(c?.business?.id||0),
         prices,
-        yesterday:stats
+        yesterday:stats,
+        history14:history
       });
     }
 
@@ -218,6 +223,11 @@ module.exports=async function handler(req,res){
             units:n(os.units),
             revenue:n(os.revenue),
             cancelledUnits:n(os.cancelledUnits)
+          },
+          history14:{
+            units:n(c.history14?.byOffer?.[p.offerId]?.units),
+            revenue:n(c.history14?.byOffer?.[p.offerId]?.revenue),
+            cancelledUnits:n(c.history14?.byOffer?.[p.offerId]?.cancelledUnits)
           }
         });
       }
@@ -235,6 +245,19 @@ module.exports=async function handler(req,res){
     total.revenue=Math.round(total.revenue*100)/100;
     total.commission=Math.round(total.commission*100)/100;
 
+    const history14={orders:0,units:0,revenue:0,cancelledUnits:0,commission:0};
+    for(const c of campaignData){
+      history14.orders+=n(c.history14?.orders);
+      history14.units+=n(c.history14?.units);
+      history14.revenue+=n(c.history14?.revenue);
+      history14.cancelledUnits+=n(c.history14?.cancelledUnits);
+      history14.commission+=n(c.history14?.commission);
+    }
+    history14.revenue=Math.round(history14.revenue*100)/100;
+    history14.commission=Math.round(history14.commission*100)/100;
+    history14.avgRevenuePerUnit=history14.units?Math.round(history14.revenue/history14.units*100)/100:0;
+    history14.avgCommissionPerUnit=history14.units?Math.round(history14.commission/history14.units*100)/100:0;
+
     return send(res,200,{
       ok:true,
       readOnly:true,
@@ -244,7 +267,9 @@ module.exports=async function handler(req,res){
         id:Number(c.id),domain:String(c.domain||''),placementType:String(c.placementType||''),business:c.business||null
       })),
       yesterday,
+      historyFrom,
       total,
+      history14,
       products,
       note:'Яндекс Маркет подключён только на чтение. Комиссия из stats/orders пока показывается агрегированно по заказам; финансовую модель по услугам подключим отдельно.'
     });
