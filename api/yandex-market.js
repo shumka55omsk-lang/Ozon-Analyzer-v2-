@@ -239,14 +239,13 @@ module.exports=async function handler(req,res){
       const bath=new Set(['140326','1403261','20032026','30092025']);
       const docs=entries.map(e=>({name:e.name,objects:collectObjects(e.json,[])}));
       const orderToSkus=new Map();
-      for(const d of docs){
-        for(const o of d.objects){
-          const sku=String(o.shopSku??o.shopSKU??'');
-          const order=String(o.orderId??o.orderID??'');
-          if(bath.has(sku)&&order){
-            if(!orderToSkus.has(order)) orderToSkus.set(order,new Set());
-            orderToSkus.get(order).add(sku);
-          }
+      const placementDoc=docs.find(d=>d.name.replace(/\.json$/i,'')==='placement');
+      for(const o of (placementDoc?.objects||[])){
+        const sku=String(o.shopSku??o.shopSKU??'');
+        const order=String(o.orderId??o.orderID??'');
+        if(bath.has(sku)&&order){
+          if(!orderToSkus.has(order)) orderToSkus.set(order,new Set());
+          orderToSkus.get(order).add(sku);
         }
       }
       const perSku={};
@@ -260,7 +259,12 @@ module.exports=async function handler(req,res){
         for(const o of d.objects){
           let sku=String(o.shopSku??o.shopSKU??'');
           const order=String(o.orderId??o.orderID??'');
-          if(!bath.has(sku)&&order&&orderToSkus.get(order)?.size===1) sku=[...orderToSkus.get(order)][0];
+          const fileKey=d.name.replace(/\.json$/i,'');
+          if(fileKey!=='placement'){
+            if(!order||!orderToSkus.has(order)) continue;
+            const set=orderToSkus.get(order);
+            if(set?.size===1) sku=[...set][0];
+          }
           if(!bath.has(sku)) continue;
           matched++;
           const totalAmount=safeNum(o.totalAmount);
@@ -273,7 +277,6 @@ module.exports=async function handler(req,res){
           bucket.merchantPrice+=safeNum(o.merchantPrice);
           bucket.buyerPaid+=safeNum(o.buyerPaid);
           if(order) bucket.uniqueOrders.add(order);
-          const fileKey=d.name.replace(/\.json$/i,'');
           if(fileKey==='placement'){
             const qty=Math.max(0,safeNum(o.count))||1;
             bucket.placementUnits+=qty;
@@ -293,8 +296,19 @@ module.exports=async function handler(req,res){
         b.uniqueOrders=b.uniqueOrders.size;
         b.avgServiceCostPerUnit=b.placementUnits?Math.round(b.costs/b.placementUnits*100)/100:0;
         b.avgPlacementRevenuePerUnit=b.placementUnits?Math.round(b.placementRevenue/b.placementUnits*100)/100:0;
-        b.estimatedProfitPerUnit=b.placementUnits?Math.round((b.placementRevenue/b.placementUnits-b.costs/b.placementUnits-55)*100)/100:0;
-        b.safePriceFor200=b.placementUnits?Math.ceil((55+200+b.costs/b.placementUnits)/10)*10:0;
+        const variableNames=new Set(['placement','payment_transfer','payment_accepting']);
+        const variableCost=Object.entries(b.serviceBreakdown)
+          .filter(([name])=>variableNames.has(name))
+          .reduce((s,[,v])=>s+v,0);
+        const fixedCost=Math.max(0,b.costs-variableCost);
+        b.variableCost=Math.round(variableCost*100)/100;
+        b.variableRate=b.placementRevenue?Math.round(variableCost/b.placementRevenue*10000)/10000:0;
+        b.fixedCostPerUnit=b.placementUnits?Math.round(fixedCost/b.placementUnits*100)/100:0;
+        const avgPrice=b.placementUnits?b.placementRevenue/b.placementUnits:0;
+        b.estimatedProfitPerUnit=b.placementUnits?Math.round((avgPrice*(1-b.variableRate)-b.fixedCostPerUnit-55)*100)/100:0;
+        b.safePriceFor200=b.placementUnits&&b.variableRate<1
+          ?Math.ceil(((55+200+b.fixedCostPerUnit)/(1-b.variableRate))/10)*10
+          :0;
         b.serviceBreakdown=Object.entries(b.serviceBreakdown)
           .map(([name,value])=>({name,value:Math.round(value*100)/100}))
           .sort((a,b)=>b.value-a.value);
