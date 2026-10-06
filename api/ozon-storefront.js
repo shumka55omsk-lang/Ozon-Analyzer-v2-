@@ -8,7 +8,7 @@ const ITEMS=[
 function send(res,status,body){
   res.statusCode=status;
   res.setHeader('Content-Type','application/json; charset=utf-8');
-  res.setHeader('Cache-Control','no-store');
+  res.setHeader('Cache-Control','public, s-maxage=300, stale-while-revalidate=600');
   res.end(JSON.stringify(body));
 }
 function n(v){
@@ -114,9 +114,6 @@ async function observe(item){
 
 module.exports=async function handler(req,res){
   if(req.method!=='GET') return send(res,405,{ok:false,error:'GET only'});
-  const secret=process.env.CRON_SECRET;
-  const auth=String(req.headers?.authorization||'');
-  if(!secret||auth!=='Bearer '+secret) return send(res,401,{ok:false,error:'Unauthorized'});
   const items=[];
   for(const item of ITEMS) items.push(await observe(item));
   return send(res,200,{
