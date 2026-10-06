@@ -7,6 +7,8 @@ const PRICE_STEP=0.05;
 const CHANGE_WEEKDAYS=new Set([1,3,5]); // Mon/Wed/Fri in Omsk morning run
 const ELASTIC_BOOSTING_ACTION_ID=1977747;
 const UNIFIED_DRY_RUN=true; // Hard safety lock: no marketplace writes while validating recommendations.
+const OZON_BUYER_TARGET_MIN=220;
+const OZON_BUYER_TARGET_MAX=240;
 
 function send(res,status,body){
   res.statusCode=status;
@@ -194,7 +196,12 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
   const hardDrop=enoughData&&a.ratio<0.60;
 
   let action='HOLD',reason='',newPrice=currentBase;
-  if(promoActive){
+  // Seller API does not provide the shopper's final personalized/co-invested checkout price.
+  // Until a storefront observer is available, never recommend changing Ozon price from seller economics alone.
+  const buyerPriceObservable=false;
+  if(!buyerPriceObservable){
+    reason='Цель покупателя '+OZON_BUYER_TARGET_MIN+'–'+OZON_BUYER_TARGET_MAX+' ₽. Конечная цена с соинвестом/скидками не видна в Seller API — до подключения наблюдателя цены только HOLD.';
+  }else if(promoActive){
     reason='Товар ещё в «Эластичном бустинге»: сначала убрать из акции, затем наблюдать 24 часа.';
   }else if(!enoughData){
     reason='Недостаточно заказов для безопасного автоматического изменения цены.';
@@ -224,6 +231,9 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
   const recommendedProfit=recommendedPrice-(recommendedPrice*commissionPct/100)-(recommendedPrice*acquiringRate)-fixed-COGS;
   return {
     marketplace:'Ozon',
+    buyerTargetMin:OZON_BUYER_TARGET_MIN,
+    buyerTargetMax:OZON_BUYER_TARGET_MAX,
+    buyerPriceObserved:false,
     productId:String(p.productId),
     offerId:String(p.offerId||''),
     name:p.name,
@@ -389,7 +399,7 @@ function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalyti
   const lines=[
     'Маркетплейсы — сидушки для бани · '+date,
     'Режим: ЕДИНЫЙ DRY-RUN · без изменения цен',
-    'Цель: не менее '+TARGET_PROFIT+' ₽ прибыли/шт.',
+    'Цель: покупателю '+OZON_BUYER_TARGET_MIN+'–'+OZON_BUYER_TARGET_MAX+' ₽ · продавцу не менее '+TARGET_PROFIT+' ₽ прибыли/шт.',
     '',
     'OZON'
   ];
