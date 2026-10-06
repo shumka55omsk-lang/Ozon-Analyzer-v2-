@@ -201,6 +201,122 @@ async function fetchStorefront(url) {
   return { status: r.status, finalUrl: r.url, text, data };
 }
 
+
+function pickPrice(record, names) {
+  if (!record || typeof record !== 'object') return 0;
+  const lower = Object.fromEntries(Object.entries(record).map(([k,v]) => [String(k).toLowerCase(), v]));
+  for (const name of names) {
+    const v = lower[String(name).toLowerCase()];
+    const x = storefrontNum(v);
+    if (x >= 50 && x <= 5000) return x;
+  }
+  return 0;
+}
+
+async function observeBrightDataPrices(items) {
+  const token = process.env.BRIGHTDATA_API_TOKEN;
+  if (!token) {
+    return {
+      configured: false,
+      reliableCount: 0,
+      error: 'BRIGHTDATA_API_TOKEN not configured',
+      items: []
+    };
+  }
+
+  const datasetId = process.env.BRIGHTDATA_OZON_DATASET_ID || 'gd_lutq85sl13rlndbzai';
+  const input = items.map(x => ({
+    url: 'https://www.ozon.ru/product/' + encodeURIComponent(String(x.sku)) + '/'
+  }));
+  const endpoint =
+    'https://api.brightdata.com/datasets/v3/scrape?dataset_id=' +
+    encodeURIComponent(datasetId) +
+    '&format=json&include_errors=true';
+
+  let response = null;
+  let text = '';
+  for (const body of [input, { input }]) {
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json,text/plain,*/*'
+      },
+      body: JSON.stringify(body)
+    });
+    text = await r.text();
+    if (r.ok || r.status === 202) {
+      response = { status: r.status, text };
+      break;
+    }
+    response = { status: r.status, text };
+  }
+
+  if (!response) {
+    return { configured: true, reliableCount: 0, error: 'No Bright Data response', items: [] };
+  }
+
+  let data = null;
+  try { data = JSON.parse(response.text); } catch {}
+
+  if (response.status === 202) {
+    return {
+      configured: true,
+      reliableCount: 0,
+      pending: true,
+      snapshotId: String(data?.snapshot_id || ''),
+      error: 'Bright Data snapshot is still processing',
+      items: []
+    };
+  }
+
+  if (response.status < 200 || response.status >= 300) {
+    return {
+      configured: true,
+      reliableCount: 0,
+      error: 'Bright Data HTTP ' + response.status + ': ' + response.text.slice(0, 300),
+      items: []
+    };
+  }
+
+  const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+  const out = [];
+  for (const item of items) {
+    const sku = String(item.sku);
+    const row = rows.find(r => {
+      const url = String(r?.url || r?.product_url || r?.link || '');
+      const rowSku = String(r?.sku || r?.product_id || r?.id || '');
+      return rowSku === sku || url.includes(sku);
+    }) || null;
+
+    const membership = pickPrice(row, [
+      'membership_price','member_price','ozon_card_price','card_price',
+      'price_with_card','ozoncard_price'
+    ]);
+    const finalPrice = pickPrice(row, [
+      'final_price','actual_price','sale_price','current_price','price'
+    ]);
+    const observed = membership || finalPrice;
+
+    out.push({
+      sku,
+      reliable: !!observed,
+      buyerPriceObserved: observed || null,
+      buyerPriceType: membership ? 'membership/card' : (finalPrice ? 'final' : ''),
+      finalPrice: finalPrice || null,
+      membershipPrice: membership || null,
+      recordKeys: row ? Object.keys(row).slice(0, 40) : []
+    });
+  }
+
+  return {
+    configured: true,
+    reliableCount: out.filter(x => x.reliable).length,
+    items: out
+  };
+}
+
 async function observeStorefrontPrice(sku) {
   const path = '/product/' + encodeURIComponent(String(sku)) + '/';
   const urls = [
@@ -314,17 +430,47 @@ module.exports = async function handler(req, res) {
 
     let storefront = null;
     if (String(req.query?.storefront || '') === '1') {
-      const bath = products.filter(p => BATH_SKUS[String(p.productId)]);
-      const observed = [];
-      for (const p of bath) {
-        const o = await observeStorefrontPrice(BATH_SKUS[String(p.productId)]);
-        p.buyerPriceObserved = o.buyerPriceObserved;
-        p.buyerPriceReliable = o.reliable;
-        p.buyerPriceSku = o.sku;
-        observed.push({ productId: p.productId, offerId: p.offerId, ...o });
+      const bath = products
+        .filter(p => BATH_SKUS[String(p.productId)])
+        .map(p => ({...p, sku:BATH_SKUS[String(p.productId)]}));
+
+      const bright = await observeBrightDataPrices(bath);
+      let observed = [];
+
+      if (bright.configured) {
+        observed = bath.map(p => {
+          const o = bright.items.find(x => String(x.sku) === String(p.sku)) || {
+            sku:p.sku,reliable:false,buyerPriceObserved:null,buyerPriceType:''
+          };
+          const target = products.find(x => String(x.productId) === String(p.productId));
+          if (target) {
+            target.buyerPriceObserved = o.buyerPriceObserved;
+            target.buyerPriceReliable = !!o.reliable;
+            target.buyerPriceType = o.buyerPriceType || '';
+            target.buyerPriceSku = p.sku;
+          }
+          return {productId:p.productId,offerId:p.offerId,...o};
+        });
+      } else {
+        for (const p of bath) {
+          const o = await observeStorefrontPrice(p.sku);
+          const target = products.find(x => String(x.productId) === String(p.productId));
+          if (target) {
+            target.buyerPriceObserved = o.buyerPriceObserved;
+            target.buyerPriceReliable = o.reliable;
+            target.buyerPriceType = o.reliable ? 'direct' : '';
+            target.buyerPriceSku = o.sku;
+          }
+          observed.push({ productId:p.productId, offerId:p.offerId, ...o });
+        }
       }
+
       storefront = {
         ok: true,
+        source: bright.configured ? 'brightdata' : 'direct',
+        configured: bright.configured,
+        pending: !!bright.pending,
+        error: bright.error || '',
         targetMin: 220,
         targetMax: 240,
         reliableCount: observed.filter(x => x.reliable).length,
