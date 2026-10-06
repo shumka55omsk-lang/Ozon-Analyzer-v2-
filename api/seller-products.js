@@ -1,4 +1,10 @@
 const BASE = 'https://api-seller.ozon.ru';
+const BATH_SKUS = {
+  '2808600941':'2921050259',
+  '3768033857':'3649421296',
+  '3768184568':'3649561177',
+  '3826876199':'3695855321'
+};
 
 function send(res, status, body) {
   res.statusCode = status;
@@ -139,6 +145,102 @@ function priceObj(p) {
   return p?.price || p?.prices || {};
 }
 
+
+function storefrontNum(v) {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v !== 'string') return 0;
+  const s = v.replace(/\u00a0/g, ' ').replace(/[^\d.,]/g, '').replace(',', '.');
+  const x = Number(s);
+  return Number.isFinite(x) ? x : 0;
+}
+
+function collectPriceFields(v, path = '', out = []) {
+  if (Array.isArray(v)) {
+    for (let i = 0; i < v.length; i++) collectPriceFields(v[i], path + '[' + i + ']', out);
+    return out;
+  }
+  if (!v || typeof v !== 'object') return out;
+
+  for (const [k, val] of Object.entries(v)) {
+    const p = path ? path + '.' + k : k;
+    const key = k.toLowerCase();
+    if (
+      key.includes('price') ||
+      key.includes('cost') ||
+      key.includes('card') ||
+      key.includes('buyer') ||
+      key.includes('customer') ||
+      key.includes('final')
+    ) {
+      if (typeof val === 'string' || typeof val === 'number') {
+        const price = storefrontNum(val);
+        if (price >= 50 && price <= 5000) out.push({ path: p, value: String(val), price });
+      }
+    }
+    if (val && typeof val === 'object') collectPriceFields(val, p, out);
+  }
+  return out;
+}
+
+function strongBuyerField(path) {
+  return /(ozon.?card|card.?price|buyer|customer|final.?price|client.?price|price.?with.?card)/i.test(String(path || ''));
+}
+
+async function fetchStorefront(url) {
+  const r = await fetch(url, {
+    headers: {
+      'Accept': 'application/json,text/plain,*/*',
+      'Accept-Language': 'ru-RU,ru;q=0.9',
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'
+    },
+    redirect: 'follow'
+  });
+  const text = await r.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch {}
+  return { status: r.status, finalUrl: r.url, text, data };
+}
+
+async function observeStorefrontPrice(sku) {
+  const path = '/product/' + encodeURIComponent(String(sku)) + '/';
+  const urls = [
+    ['composer', 'https://www.ozon.ru/api/composer-api.bx/page/json/v2?url=' + encodeURIComponent(path)],
+    ['page', 'https://www.ozon.ru' + path]
+  ];
+  const attempts = [];
+  const evidence = [];
+
+  for (const [kind, url] of urls) {
+    try {
+      const r = await fetchStorefront(url);
+      let fields = r.data ? collectPriceFields(r.data) : [];
+      if (!fields.length && r.text) {
+        const rx = /"([^"]*(?:price|Price|card|Card|buyer|Buyer|customer|Customer|final|Final)[^"]*)":(?:"([^"]+)"|(\d+(?:\.\d+)?))/g;
+        let m;
+        while ((m = rx.exec(r.text)) && fields.length < 120) {
+          const price = storefrontNum(m[2] ?? m[3]);
+          if (price >= 50 && price <= 5000) fields.push({ path: m[1], value: String(m[2] ?? m[3]), price });
+        }
+      }
+      const strong = fields.filter(x => strongBuyerField(x.path));
+      evidence.push(...strong);
+      attempts.push({ kind, status: r.status, finalUrl: r.finalUrl, bytes: r.text.length, strongFields: strong.slice(0, 8) });
+    } catch (e) {
+      attempts.push({ kind, error: e?.message || String(e) });
+    }
+  }
+
+  const prices = evidence.map(x => x.price).filter(x => x >= 50 && x <= 5000);
+  const observed = prices.length ? Math.min(...prices) : 0;
+  return {
+    sku: String(sku),
+    reliable: !!observed,
+    buyerPriceObserved: observed || null,
+    evidence: evidence.slice(0, 12),
+    attempts
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
     return send(res, 405, { ok: false, error: 'Используйте GET' });
@@ -210,12 +312,33 @@ module.exports = async function handler(req, res) {
 
     products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 
+    let storefront = null;
+    if (String(req.query?.storefront || '') === '1') {
+      const bath = products.filter(p => BATH_SKUS[String(p.productId)]);
+      const observed = [];
+      for (const p of bath) {
+        const o = await observeStorefrontPrice(BATH_SKUS[String(p.productId)]);
+        p.buyerPriceObserved = o.buyerPriceObserved;
+        p.buyerPriceReliable = o.reliable;
+        p.buyerPriceSku = o.sku;
+        observed.push({ productId: p.productId, offerId: p.offerId, ...o });
+      }
+      storefront = {
+        ok: true,
+        targetMin: 220,
+        targetMax: 240,
+        reliableCount: observed.filter(x => x.reliable).length,
+        observed
+      };
+    }
+
     return send(res, 200, {
       ok: true,
       readOnly: true,
       total: products.length,
       products,
       warning,
+      storefront,
       fetchedAt: new Date().toISOString()
     });
   } catch (e) {
