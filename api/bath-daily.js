@@ -17,6 +17,18 @@ function send(res,status,body){
 function n(v){const x=Number(v);return Number.isFinite(x)?x:0}
 function r2(v){return Math.round(n(v)*100)/100}
 function round10(v){return Math.ceil(n(v)/10)*10}
+function raiseStepPrice(current){
+  const c=n(current);
+  const cap=c*(1+PRICE_STEP);
+  const rounded=Math.floor(cap/10)*10;
+  return Math.max(c,rounded);
+}
+function lowerStepPrice(current){
+  const c=n(current);
+  const floor=c*(1-PRICE_STEP);
+  const rounded=Math.ceil(floor/10)*10;
+  return Math.min(c,rounded);
+}
 function pct(v){return Math.round(n(v)*10)/10}
 function rub(v){return Math.round(n(v))+' ₽'}
 function colorName(name){
@@ -189,7 +201,7 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
   }else if(!changeDay){
     reason='День наблюдения: изменение цены разрешено Пн/Ср/Пт, сегодня только контроль.';
   }else if(currentBase<safeFloor&&stable){
-    newPrice=Math.min(safeFloor,round10(currentBase*(1+PRICE_STEP)));
+    newPrice=Math.min(safeFloor,raiseStepPrice(currentBase));
     if(newPrice>currentBase){
       action='RAISE';
       reason='Продажи стабильны относительно фона, цена ниже уровня прибыли '+TARGET_PROFIT+' ₽.';
@@ -202,7 +214,7 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
     reason='Сильная просадка заказов: повышение заморожено для защиты выдачи.';
   }else if(currentBase>=safeFloor){
     if(hardDrop&&currentBase>safeFloor){
-      const candidate=Math.max(safeFloor,Math.floor((currentBase*(1-PRICE_STEP))/10)*10);
+      const candidate=Math.max(safeFloor,lowerStepPrice(currentBase));
       if(candidate<currentBase){action='LOWER';newPrice=candidate;reason='Цена выше защитного уровня, а продажи просели; откат на один шаг.';}
       else reason='Цена на минимальном прибыльном уровне — ниже не опускаем.';
     }else reason='Целевая прибыль защищена; текущую цену сохраняем.';
@@ -256,7 +268,7 @@ function genericPriceDecision({
   }else if(!changeDay){
     reason='День наблюдения: сегодня только расчёт, без шага цены.';
   }else if(current<safe&&ratio>=0.80){
-    recommended=Math.min(safe,round10(current*(1+PRICE_STEP)));
+    recommended=Math.min(safe,raiseStepPrice(current));
     if(recommended>current){
       action='RAISE';
       reason='Продажи стабильны, цена ниже защитного уровня.';
@@ -264,7 +276,7 @@ function genericPriceDecision({
   }else if(current<safe&&ratio<0.80){
     reason='Продажи просели — повышение цены заморожено.';
   }else if(current>=safe&&ratio<0.60&&current>safe){
-    recommended=Math.max(safe,Math.floor((current*(1-PRICE_STEP))/10)*10);
+    recommended=Math.max(safe,lowerStepPrice(current));
     if(recommended<current){
       action='LOWER';
       reason='Цена выше защитного уровня и продажи заметно просели; dry-run предлагает один шаг вниз.';
@@ -273,6 +285,14 @@ function genericPriceDecision({
     reason='Целевая прибыль защищена; текущую цену сохраняем.';
   }
 
+  if(current>0&&recommended>0){
+    const delta=Math.abs(recommended-current)/current;
+    if(delta>PRICE_STEP+0.000001){
+      action='HOLD';
+      recommended=current;
+      reason='Защитный стоп: рассчитанный шаг превысил лимит '+Math.round(PRICE_STEP*100)+'%.';
+    }
+  }
   const expectedProfit=current>0&&safe>0&&currentProfit!==0
     ?currentProfit
     :0;
