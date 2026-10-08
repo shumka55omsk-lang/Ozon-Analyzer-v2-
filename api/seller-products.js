@@ -213,7 +213,7 @@ function pickPrice(record, names) {
   return 0;
 }
 
-async function observeBrightDataPrices(items) {
+async function observeBrightDataPrices(items, existingSnapshotId = '') {
   const token = process.env.BRIGHTDATA_API_TOKEN;
   if (!token) {
     return {
@@ -235,22 +235,30 @@ async function observeBrightDataPrices(items) {
 
   let response = null;
   let text = '';
-  for (const body of [input, { input }]) {
-    const r = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + token,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json,text/plain,*/*'
-      },
-      body: JSON.stringify(body)
-    });
-    text = await r.text();
-    if (r.ok || r.status === 202) {
+
+  if (existingSnapshotId) {
+    response = {
+      status: 202,
+      text: JSON.stringify({ snapshot_id: String(existingSnapshotId) })
+    };
+  } else {
+    for (const body of [input, { input }]) {
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json,text/plain,*/*'
+        },
+        body: JSON.stringify(body)
+      });
+      text = await r.text();
+      if (r.ok || r.status === 202) {
+        response = { status: r.status, text };
+        break;
+      }
       response = { status: r.status, text };
-      break;
     }
-    response = { status: r.status, text };
   }
 
   if (!response) {
@@ -507,7 +515,10 @@ module.exports = async function handler(req, res) {
         .filter(p => BATH_SKUS[String(p.productId)])
         .map(p => ({...p, sku:BATH_SKUS[String(p.productId)]}));
 
-      const bright = await observeBrightDataPrices(bath);
+      const bright = await observeBrightDataPrices(
+        bath,
+        String(req.query?.snapshotId || '')
+      );
       let observed = [];
 
       if (bright.configured) {
@@ -543,6 +554,8 @@ module.exports = async function handler(req, res) {
         source: bright.configured ? 'brightdata' : 'direct',
         configured: bright.configured,
         pending: !!bright.pending,
+        snapshotId: bright.snapshotId || '',
+        snapshotStatus: bright.snapshotStatus || '',
         error: bright.error || '',
         targetMin: 220,
         targetMax: 240,
