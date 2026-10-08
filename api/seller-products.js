@@ -261,14 +261,87 @@ async function observeBrightDataPrices(items) {
   try { data = JSON.parse(response.text); } catch {}
 
   if (response.status === 202) {
-    return {
-      configured: true,
-      reliableCount: 0,
-      pending: true,
-      snapshotId: String(data?.snapshot_id || ''),
-      error: 'Bright Data snapshot is still processing',
-      items: []
+    const snapshotId = String(data?.snapshot_id || '');
+    if (!snapshotId) {
+      return {
+        configured: true,
+        reliableCount: 0,
+        pending: true,
+        error: 'Bright Data returned 202 without snapshot_id',
+        items: []
+      };
+    }
+
+    const headers = {
+      'Authorization': 'Bearer ' + token,
+      'Accept': 'application/json,text/plain,*/*'
     };
+
+    let readyData = null;
+    let lastStatus = 'starting';
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      const progressResp = await fetch(
+        'https://api.brightdata.com/datasets/v3/progress/' + encodeURIComponent(snapshotId),
+        { headers }
+      );
+      const progressText = await progressResp.text();
+      let progress = null;
+      try { progress = JSON.parse(progressText); } catch {}
+      lastStatus = String(progress?.status || '').toLowerCase();
+
+      if (lastStatus === 'failed') {
+        return {
+          configured: true,
+          reliableCount: 0,
+          pending: false,
+          snapshotId,
+          error: 'Bright Data snapshot failed',
+          items: []
+        };
+      }
+
+      if (lastStatus === 'ready') {
+        const snapResp = await fetch(
+          'https://api.brightdata.com/datasets/v3/snapshot/' +
+            encodeURIComponent(snapshotId) +
+            '?format=json',
+          { headers }
+        );
+        const snapText = await snapResp.text();
+
+        if (snapResp.status === 200) {
+          try { readyData = JSON.parse(snapText); }
+          catch {
+            readyData = snapText
+              .split(/\r?\n/)
+              .filter(Boolean)
+              .map(line => {
+                try { return JSON.parse(line); } catch { return null; }
+              })
+              .filter(Boolean);
+          }
+          break;
+        }
+      }
+    }
+
+    if (!readyData) {
+      return {
+        configured: true,
+        reliableCount: 0,
+        pending: true,
+        snapshotId,
+        snapshotStatus: lastStatus || 'processing',
+        error: 'Bright Data snapshot is still processing',
+        items: []
+      };
+    }
+
+    data = readyData;
+    response = { status: 200, text: JSON.stringify(readyData) };
   }
 
   if (response.status < 200 || response.status >= 300) {
