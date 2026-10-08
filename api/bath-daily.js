@@ -256,6 +256,9 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
     buyerPriceObserved:buyerPriceObservable?r2(buyerPrice):null,
     buyerPriceReliable:buyerPriceObservable,
     buyerPriceType:String(p.buyerPriceType||''),
+    buyerPriceSample:n(p.buyerPriceSample),
+    buyerPriceAvg:r2(n(p.buyerPriceAvg)),
+    buyerPriceInTarget:n(p.buyerPriceInTarget),
     productId:String(p.productId),
     offerId:String(p.offerId||''),
     name:p.name,
@@ -431,7 +434,7 @@ function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalyti
     const arrow=d.action==='RAISE'?' ↑':d.action==='LOWER'?' ↓':'';
     lines.push(
       d.color+': '+d.yesterdayOrders+' заказ(ов) вчера · '+rub(d.yesterdayRevenue),
-      'Покупатель: '+(d.buyerPriceReliable?rub(d.buyerPriceObserved)+' ('+(d.buyerPriceType||'наблюдение')+')':'не удалось получить')+' · цель '+OZON_BUYER_TARGET_MIN+'–'+OZON_BUYER_TARGET_MAX+' ₽',
+      'Покупатель: '+(d.buyerPriceReliable?rub(d.buyerPriceObserved)+' медиана · '+d.buyerPriceSample+' шт. ('+(d.buyerPriceType||'Ozon')+')':'не удалось получить')+' · цель '+OZON_BUYER_TARGET_MIN+'–'+OZON_BUYER_TARGET_MAX+' ₽',
       'Цена продавца: '+rub(d.effective)+' → '+rub(d.recommendedPrice)+(d.recommendedBuyerEstimate?' · покупателю оценочно '+rub(d.recommendedBuyerEstimate):''),
       'Прибыль: сейчас ≈ '+rub(d.currentProfit)+' · при рекомендации ≈ '+rub(d.recommendedProfit),
       '2 дня к фону: '+(d.baselineOrders>0?(d.trendPct>=0?'+':'')+d.trendPct+'%':'нет базы'),
@@ -490,7 +493,7 @@ module.exports=async function handler(req,res){
 
   try{
     const [seller,finance,analytics,promos,search,wbAnalytics,wbProducts,wbFinance,ym]=await Promise.all([
-      jsonGet(APP_BASE+'/api/seller-products?storefront=1'),
+      jsonGet(APP_BASE+'/api/seller-products'),
       jsonGet(APP_BASE+'/api/bath-finance'),
       jsonGet(APP_BASE+'/api/bath-analytics'),
       jsonGet(APP_BASE+'/api/bath-promos'),
@@ -504,6 +507,25 @@ module.exports=async function handler(req,res){
     const ymFinance=ym?.ok?await loadYmFinance():{ok:false,error:'Яндекс Маркет недоступен'};
     const products=(seller.products||[]).filter(p=>BATH_IDS.has(String(p.productId)));
     const finMap=Object.fromEntries((finance.items||[]).map(x=>[String(x.productId),x]));
+    const fbsBuyerMap=Object.fromEntries(
+      (finance?.fbsBuyerPrices?.items||[]).map(x=>[String(x.productId),x])
+    );
+
+    for(const p of products){
+      const bp=fbsBuyerMap[String(p.productId)];
+      const recent=bp?.customerPrice48h||{};
+      const fallback=bp?.customerPrice||{};
+      const useRecent=n(recent.count)>=5;
+      const chosen=useRecent?recent:fallback;
+      const sample=n(chosen.count);
+      const median=n(chosen.median);
+      p.buyerPriceObserved=sample>=5&&median>0?median:null;
+      p.buyerPriceReliable=sample>=5&&median>0;
+      p.buyerPriceType=useRecent?'Ozon customer_price · 48ч медиана':'Ozon customer_price · 7д медиана';
+      p.buyerPriceSample=sample;
+      p.buyerPriceInTarget=n(chosen.in220to240);
+      p.buyerPriceAvg=n(chosen.avg);
+    }
     let reliable=(finance.items||[]).filter(x=>n(x.postingHits)>=5).map(x=>n(x.avgDeliveryAndOther));
     if(!reliable.length) reliable=(finance.items||[]).filter(x=>n(x.postingHits)>0).map(x=>n(x.avgDeliveryAndOther));
     const fallbackFixed=median(reliable)||120;
