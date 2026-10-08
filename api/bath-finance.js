@@ -118,6 +118,7 @@ module.exports=async function handler(req,res){
         coinvestmentSamples:[],
         bonusSamples:[],
         quantities:[],
+        financeTuples:[],
         commissionFieldNames:new Set(),
         productFieldNames:new Set()
       };
@@ -157,6 +158,19 @@ module.exports=async function handler(req,res){
             if(coinvestment!==0) s.coinvestmentSamples.push(coinvestment/qty);
             if(bonus!==0) s.bonusSamples.push(bonus/qty);
             s.quantities.push(qty);
+            if(s.financeTuples.length<40){
+              s.financeTuples.push({
+                quantity:qty,
+                seller_price:r2(sale),
+                sale_price:r2(salePrice),
+                sale_amount:r2(saleAmount),
+                bonus:r2(bonus),
+                coinvestment:r2(coinvestment),
+                commission:r2(money(comm?.commission)),
+                commission_ratio:r2(Number(comm?.commission_ratio)||0),
+                sale_commission:r2(money(comm?.sale_commission))
+              });
+            }
             const deliveryTotal=money(delivery?.total_accrued);
 
             if(sale>0) s.sales+=sale;
@@ -238,6 +252,7 @@ module.exports=async function handler(req,res){
           commission:[...s.commissionFieldNames].sort(),
           product:[...s.productFieldNames].sort()
         },
+        financeTuples:s.financeTuples,
         breakdown
       };
     });
