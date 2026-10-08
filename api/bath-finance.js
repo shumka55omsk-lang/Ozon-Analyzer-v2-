@@ -107,7 +107,7 @@ async function fbsCustomerPrices(products){
     for(let page=0;page<20;page++){
       const body={
         filter:{since,to},
-        limit:1000,
+        limit:100,
         cursor,
         sort_dir:'DESC',
         with:{
