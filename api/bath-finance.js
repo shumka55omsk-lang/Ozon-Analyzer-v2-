@@ -96,7 +96,15 @@ async function dayAccruals(date){
 async function fbsCustomerPrices(products){
   const skuSet=new Set(products.map(x=>String(x.sku)));
   const rows={};
-  for(const p of products) rows[String(p.sku)]={...p,customerPrices:[],sellerPrices:[],units:0};
+  for(const p of products) rows[String(p.sku)]={
+    ...p,
+    customerPrices:[],
+    customerPrices48h:[],
+    sellerPrices:[],
+    sellerPrices48h:[],
+    units:0,
+    units48h:0
+  };
 
   const now=new Date();
   const since=new Date(now.getTime()-7*24*60*60*1000).toISOString();
@@ -121,6 +129,13 @@ async function fbsCustomerPrices(products){
       const data=await ozonPost('/v4/posting/fbs/list',body,'finance');
       const postings=Array.isArray(data?.postings)?data.postings:[];
       for(const posting of postings){
+        const postingTime=Date.parse(
+          posting?.in_process_at||
+          posting?.order_date||
+          posting?.created_at||
+          ''
+        );
+        const is48h=Number.isFinite(postingTime)&&postingTime>=(Date.now()-48*60*60*1000);
         const fp=Array.isArray(posting?.financial_data?.products)?posting.financial_data.products:[];
         for(const x of fp){
           const sku=String(x?.product_id??x?.sku??'');
@@ -132,9 +147,16 @@ async function fbsCustomerPrices(products){
           if(customer>0){
             for(let i=0;i<qty;i++) r.customerPrices.push(customer);
             r.units+=qty;
+            if(is48h){
+              for(let i=0;i<qty;i++) r.customerPrices48h.push(customer);
+              r.units48h+=qty;
+            }
           }
           if(seller>0){
             for(let i=0;i<qty;i++) r.sellerPrices.push(seller);
+            if(is48h){
+              for(let i=0;i<qty;i++) r.sellerPrices48h.push(seller);
+            }
           }
         }
       }
@@ -154,8 +176,11 @@ async function fbsCustomerPrices(products){
         sku:r.sku,
         name:r.name,
         units:r.units,
+        units48h:r.units48h,
         customerPrice:sampleStats(r.customerPrices),
-        sellerPrice:sampleStats(r.sellerPrices)
+        customerPrice48h:sampleStats(r.customerPrices48h),
+        sellerPrice:sampleStats(r.sellerPrices),
+        sellerPrice48h:sampleStats(r.sellerPrices48h)
       }))
     };
   }catch(e){
