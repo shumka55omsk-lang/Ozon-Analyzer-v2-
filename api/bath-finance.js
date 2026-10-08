@@ -118,7 +118,7 @@ async function fbsCustomerPrices(products){
           translit:false
         }
       };
-      const data=await ozonPost('/v4/posting/fbs/list',body,'product');
+      const data=await ozonPost('/v4/posting/fbs/list',body,'finance');
       const postings=Array.isArray(data?.postings)?data.postings:[];
       for(const posting of postings){
         const fp=Array.isArray(posting?.financial_data?.products)?posting.financial_data.products:[];
