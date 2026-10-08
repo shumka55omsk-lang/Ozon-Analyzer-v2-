@@ -92,12 +92,92 @@ async function dayAccruals(date){
   return out;
 }
 
+
+async function fbsCustomerPrices(products){
+  const skuSet=new Set(products.map(x=>String(x.sku)));
+  const rows={};
+  for(const p of products) rows[String(p.sku)]={...p,customerPrices:[],sellerPrices:[],units:0};
+
+  const now=new Date();
+  const since=new Date(now.getTime()-7*24*60*60*1000).toISOString();
+  const to=now.toISOString();
+  let cursor='';
+
+  try{
+    for(let page=0;page<20;page++){
+      const body={
+        filter:{since,to},
+        limit:1000,
+        cursor,
+        sort_dir:'DESC',
+        with:{
+          analytics_data:false,
+          barcodes:false,
+          financial_data:true,
+          legal_info:false,
+          translit:false
+        }
+      };
+      const data=await ozonPost('/v4/posting/fbs/list',body,'product');
+      const postings=Array.isArray(data?.postings)?data.postings:[];
+      for(const posting of postings){
+        const fp=Array.isArray(posting?.financial_data?.products)?posting.financial_data.products:[];
+        for(const x of fp){
+          const sku=String(x?.product_id??x?.sku??'');
+          if(!skuSet.has(sku)) continue;
+          const r=rows[sku];
+          const qty=Math.max(1,Number(x?.quantity)||1);
+          const customer=money(x?.customer_price);
+          const seller=money(x?.price??x?.seller_price);
+          if(customer>0){
+            for(let i=0;i<qty;i++) r.customerPrices.push(customer);
+            r.units+=qty;
+          }
+          if(seller>0){
+            for(let i=0;i<qty;i++) r.sellerPrices.push(seller);
+          }
+        }
+      }
+
+      const next=String(data?.cursor||'');
+      const hasNext=!!data?.has_next;
+      if(!hasNext||!next||next===cursor||!postings.length) break;
+      cursor=next;
+    }
+
+    return {
+      ok:true,
+      periodDays:7,
+      items:Object.values(rows).map(r=>({
+        productId:r.productId,
+        offerId:r.offerId,
+        sku:r.sku,
+        name:r.name,
+        units:r.units,
+        customerPrice:sampleStats(r.customerPrices),
+        sellerPrice:sampleStats(r.sellerPrices)
+      }))
+    };
+  }catch(e){
+    return {
+      ok:false,
+      periodDays:7,
+      error:e?.message||String(e),
+      status:Number(e?.status)||0,
+      items:[]
+    };
+  }
+}
+
 module.exports=async function handler(req,res){
   if(req.method!=='GET') return send(res,405,{ok:false,error:'Используйте GET'});
 
   try{
     const products=await bathProducts();
-    const typeMap=await accrualTypes();
+    const [typeMap,fbsBuyerPrices]=await Promise.all([
+      accrualTypes(),
+      fbsCustomerPrices(products)
+    ]);
     const skuSet=new Set(products.map(x=>x.sku));
     const stats={};
 
@@ -252,7 +332,6 @@ module.exports=async function handler(req,res){
           commission:[...s.commissionFieldNames].sort(),
           product:[...s.productFieldNames].sort()
         },
-        financeTuples:s.financeTuples,
         breakdown
       };
     });
@@ -261,8 +340,9 @@ module.exports=async function handler(req,res){
       ok:true,
       periodDays:days,
       accrualRows,
+      fbsBuyerPrices,
       items,
-      note:'Фактические удержания по finance/accrual/by-day. realizedPriceFields сравнивает seller_price, sale_price, sale_amount, coinvestment и bonus из реальных начислений. Расходы уровня продавца без привязки к SKU не распределяются.'
+      note:'fbsBuyerPrices.customerPrice — customer_price из /v4/posting/fbs/list с financial_data=true, то есть фактическая цена покупателя в отправлениях FBS. realizedPriceFields оставлен для сверки начислений. Расходы уровня продавца без привязки к SKU не распределяются.'
     });
   }catch(e){
     const status=Number(e?.status)||500;
