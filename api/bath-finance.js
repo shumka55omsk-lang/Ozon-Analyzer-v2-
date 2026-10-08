@@ -96,7 +96,10 @@ module.exports=async function handler(req,res){
         acquiring:0,
         costs:0,
         postingHits:0,
-        feeBreakdown:{}
+        feeBreakdown:{},
+        sellerPriceSamples:[],
+        commissionFieldNames:new Set(),
+        productFieldNames:new Set()
       };
     }
 
@@ -121,6 +124,9 @@ module.exports=async function handler(req,res){
             const delivery=prod?.delivery||{};
             const sale=money(comm?.seller_price);
             const commission=money(comm?.sale_commission);
+            for(const k of Object.keys(comm||{})) s.commissionFieldNames.add(String(k));
+            for(const k of Object.keys(prod||{})) s.productFieldNames.add(String(k));
+            if(sale>0) s.sellerPriceSamples.push(sale);
             const deliveryTotal=money(delivery?.total_accrued);
 
             if(sale>0) s.sales+=sale;
@@ -169,6 +175,23 @@ module.exports=async function handler(req,res){
         .sort((a,b)=>b.amount-a.amount)
         .slice(0,12);
 
+      const samples=s.sellerPriceSamples.slice().sort((a,b)=>a-b);
+      const avgSellerPrice=samples.length?samples.reduce((a,b)=>a+b,0)/samples.length:0;
+      const medianSellerPrice=samples.length
+        ?(samples.length%2
+          ?samples[(samples.length-1)/2]
+          :(samples[samples.length/2-1]+samples[samples.length/2])/2)
+        :0;
+      const freq={};
+      for(const x of samples){
+        const key=String(r2(x));
+        freq[key]=(freq[key]||0)+1;
+      }
+      const commonSellerPrices=Object.entries(freq)
+        .map(([price,count])=>({price:Number(price),count}))
+        .sort((a,b)=>b.count-a.count||a.price-b.price)
+        .slice(0,12);
+
       return {
         productId:s.productId,
         offerId:s.offerId,
@@ -185,6 +208,21 @@ module.exports=async function handler(req,res){
         costRatio:r2(ratio*100),
         nonCommissionCostRatio:r2(nonCommissionRatio*100),
         postingHits:s.postingHits,
+        sellerPriceStats:{
+          count:samples.length,
+          min:samples.length?r2(samples[0]):0,
+          max:samples.length?r2(samples[samples.length-1]):0,
+          avg:r2(avgSellerPrice),
+          median:r2(medianSellerPrice),
+          in220to240:samples.filter(x=>x>=220&&x<=240).length,
+          below220:samples.filter(x=>x<220).length,
+          above240:samples.filter(x=>x>240).length,
+          common:commonSellerPrices
+        },
+        financeFields:{
+          commission:[...s.commissionFieldNames].sort(),
+          product:[...s.productFieldNames].sort()
+        },
         breakdown
       };
     });
@@ -194,7 +232,7 @@ module.exports=async function handler(req,res){
       periodDays:days,
       accrualRows,
       items,
-      note:'Фактические удержания по finance/accrual/by-day. Расходы уровня продавца без привязки к SKU не распределяются.'
+      note:'Фактические удержания по finance/accrual/by-day. sellerPriceStats показывает распределение commission.seller_price из реальных начислений; это ещё не считаем ценой покупателя, пока не подтвердим семантику поля. Расходы уровня продавца без привязки к SKU не распределяются.'
     });
   }catch(e){
     const status=Number(e?.status)||500;
