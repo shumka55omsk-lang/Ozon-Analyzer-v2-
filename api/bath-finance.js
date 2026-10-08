@@ -63,6 +63,21 @@ async function accrualTypes(){
   return map;
 }
 
+function sampleStats(values){
+  const a=(values||[]).map(Number).filter(Number.isFinite).sort((x,y)=>x-y);
+  if(!a.length) return {count:0,min:0,max:0,avg:0,median:0,in220to240:0,common:[]};
+  const avg=a.reduce((x,y)=>x+y,0)/a.length;
+  const median=a.length%2?a[(a.length-1)/2]:(a[a.length/2-1]+a[a.length/2])/2;
+  const freq={};
+  for(const x of a){const k=String(r2(x));freq[k]=(freq[k]||0)+1;}
+  return {
+    count:a.length,min:r2(a[0]),max:r2(a[a.length-1]),avg:r2(avg),median:r2(median),
+    in220to240:a.filter(x=>x>=220&&x<=240).length,
+    common:Object.entries(freq).map(([price,count])=>({price:Number(price),count}))
+      .sort((x,y)=>y.count-x.count||x.price-y.price).slice(0,12)
+  };
+}
+
 async function dayAccruals(date){
   const out=[];
   let lastId='';
@@ -98,6 +113,11 @@ module.exports=async function handler(req,res){
         postingHits:0,
         feeBreakdown:{},
         sellerPriceSamples:[],
+        salePriceSamples:[],
+        saleAmountSamples:[],
+        coinvestmentSamples:[],
+        bonusSamples:[],
+        quantities:[],
         commissionFieldNames:new Set(),
         productFieldNames:new Set()
       };
@@ -127,6 +147,16 @@ module.exports=async function handler(req,res){
             for(const k of Object.keys(comm||{})) s.commissionFieldNames.add(String(k));
             for(const k of Object.keys(prod||{})) s.productFieldNames.add(String(k));
             if(sale>0) s.sellerPriceSamples.push(sale);
+            const salePrice=money(comm?.sale_price);
+            const saleAmount=money(comm?.sale_amount);
+            const coinvestment=money(comm?.coinvestment);
+            const bonus=money(comm?.bonus);
+            const qty=Math.max(1,Number(prod?.quantity)||1);
+            if(salePrice>0) s.salePriceSamples.push(salePrice);
+            if(saleAmount>0) s.saleAmountSamples.push(saleAmount/qty);
+            if(coinvestment!==0) s.coinvestmentSamples.push(coinvestment/qty);
+            if(bonus!==0) s.bonusSamples.push(bonus/qty);
+            s.quantities.push(qty);
             const deliveryTotal=money(delivery?.total_accrued);
 
             if(sale>0) s.sales+=sale;
@@ -175,22 +205,11 @@ module.exports=async function handler(req,res){
         .sort((a,b)=>b.amount-a.amount)
         .slice(0,12);
 
-      const samples=s.sellerPriceSamples.slice().sort((a,b)=>a-b);
-      const avgSellerPrice=samples.length?samples.reduce((a,b)=>a+b,0)/samples.length:0;
-      const medianSellerPrice=samples.length
-        ?(samples.length%2
-          ?samples[(samples.length-1)/2]
-          :(samples[samples.length/2-1]+samples[samples.length/2])/2)
-        :0;
-      const freq={};
-      for(const x of samples){
-        const key=String(r2(x));
-        freq[key]=(freq[key]||0)+1;
-      }
-      const commonSellerPrices=Object.entries(freq)
-        .map(([price,count])=>({price:Number(price),count}))
-        .sort((a,b)=>b.count-a.count||a.price-b.price)
-        .slice(0,12);
+      const sellerStats=sampleStats(s.sellerPriceSamples);
+      const salePriceStats=sampleStats(s.salePriceSamples);
+      const saleAmountStats=sampleStats(s.saleAmountSamples);
+      const coinvestmentStats=sampleStats(s.coinvestmentSamples);
+      const bonusStats=sampleStats(s.bonusSamples);
 
       return {
         productId:s.productId,
@@ -208,16 +227,12 @@ module.exports=async function handler(req,res){
         costRatio:r2(ratio*100),
         nonCommissionCostRatio:r2(nonCommissionRatio*100),
         postingHits:s.postingHits,
-        sellerPriceStats:{
-          count:samples.length,
-          min:samples.length?r2(samples[0]):0,
-          max:samples.length?r2(samples[samples.length-1]):0,
-          avg:r2(avgSellerPrice),
-          median:r2(medianSellerPrice),
-          in220to240:samples.filter(x=>x>=220&&x<=240).length,
-          below220:samples.filter(x=>x<220).length,
-          above240:samples.filter(x=>x>240).length,
-          common:commonSellerPrices
+        realizedPriceFields:{
+          seller_price:sellerStats,
+          sale_price:salePriceStats,
+          sale_amount_per_unit:saleAmountStats,
+          coinvestment_per_unit:coinvestmentStats,
+          bonus_per_unit:bonusStats
         },
         financeFields:{
           commission:[...s.commissionFieldNames].sort(),
@@ -232,7 +247,7 @@ module.exports=async function handler(req,res){
       periodDays:days,
       accrualRows,
       items,
-      note:'Фактические удержания по finance/accrual/by-day. sellerPriceStats показывает распределение commission.seller_price из реальных начислений; это ещё не считаем ценой покупателя, пока не подтвердим семантику поля. Расходы уровня продавца без привязки к SKU не распределяются.'
+      note:'Фактические удержания по finance/accrual/by-day. realizedPriceFields сравнивает seller_price, sale_price, sale_amount, coinvestment и bonus из реальных начислений. Расходы уровня продавца без привязки к SKU не распределяются.'
     });
   }catch(e){
     const status=Number(e?.status)||500;
