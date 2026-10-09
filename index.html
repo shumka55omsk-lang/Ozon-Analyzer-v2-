@@ -379,10 +379,11 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
       return {
         cogs:Number(saved.cogs)>0?Number(saved.cogs):55,
         extra:Math.max(0,Number(saved.extra)||0),
-        minProfit:Number(saved.minProfit)>0?Number(saved.minProfit):200
+        minProfit:Number(saved.minProfit)>0?Number(saved.minProfit):150,
+        targetProfit:Number(saved.targetProfit)>0?Number(saved.targetProfit):200
       };
     }
-    return {cogs:Math.max(0,Number(saved.cogs)||0),extra:Math.max(0,Number(saved.extra)||0),minProfit:Math.max(0,Number(saved.minProfit)||0)};
+    return {cogs:Math.max(0,Number(saved.cogs)||0),extra:Math.max(0,Number(saved.extra)||0),minProfit:Math.max(0,Number(saved.minProfit)||0),targetProfit:Math.max(0,Number(saved.targetProfit)||0)};
   }
   function sellerSchemeCommission(p){
     const scheme=document.getElementById('sellerScheme')?.value||'FBO';
@@ -397,6 +398,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     const cogs=Math.max(0,Number(cfg.cogs)||0);
     const extra=Math.max(0,Number(cfg.extra)||0);
     const minProfit=Math.max(0,Number(cfg.minProfit)||0);
+    const targetProfit=Math.max(minProfit,Number(cfg.targetProfit)||200);
     const finance=bathFinanceByProduct[String(p.productId||'')]||null;
     const historicalFixed=finance&&Number(finance.postingHits)>0
       ? Math.max(0,Number(finance.avgDeliveryAndOther)||0)
@@ -411,7 +413,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     const filled=cogs>0 && extra>=0 && minProfit>0;
     const belowTarget=filled && profit<minProfit;
     const minPriceTooLow=filled && Number(p.minPrice||0)<safePrice;
-    return {cfg,revenue,commissionPct,commission,acquiring,cogs,extra,minProfit,historicalFixed,financeSource,finance,profit,margin,safePrice,filled,belowTarget,minPriceTooLow};
+    return {cfg,revenue,commissionPct,commission,acquiring,cogs,extra,minProfit,targetProfit,historicalFixed,financeSource,finance,profit,margin,safePrice,filled,belowTarget,minPriceTooLow};
   }
   function sellerIndexLabel(v){
     const x=String(v||'').toUpperCase();
@@ -422,7 +424,8 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   function sellerStatusChip(e){
     if(e.minProfit<=0) return '<span class="status-chip muted">Задайте мин. прибыль</span>';
     if(e.profit<0) return '<span class="status-chip bad">Убыток</span>';
-    if(e.belowTarget) return '<span class="status-chip bad">Прибыль ниже цели</span>';
+    if(e.belowTarget) return '<span class="status-chip bad">Ниже минимума</span>';
+    if(e.profit<e.targetProfit) return '<span class="status-chip muted">Допустимая прибыль</span>';
     if(e.minPriceTooLow) return '<span class="status-chip bad">Поднять ограничение акций</span>';
     return '<span class="status-chip good">Защищено</span>';
   }
@@ -489,6 +492,11 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
             <div class="mlabel">Мин. прибыль / шт.</div>
             <input class="edit-cost" data-cost-field="minProfit" data-product-id="${escapeHtml(p.productId)}" type="number" min="0" step="1" value="${e.minProfit||''}" placeholder="₽">
           </div>
+          <div class="seller-metric">
+            <div class="mlabel">Целевая прибыль / шт.</div>
+            <input class="edit-cost" data-cost-field="targetProfit" data-product-id="${escapeHtml(p.productId)}" type="number" min="${e.minProfit}" step="1" value="${e.targetProfit}" placeholder="₽">
+            <div class="small">Допустимый диапазон: ${money(e.minProfit)}–${money(e.targetProfit)}</div>
+          </div>
           <div class="seller-metric"><div class="mlabel">Текущее ограничение акций</div><div class="mvalue">${Number(p.minPrice)>0?money(Number(p.minPrice)):'—'}</div></div>
           <div class="seller-metric"><div class="mlabel">Расчётная прибыль</div><div class="mvalue ${e.minProfit>0?(e.profit>=e.minProfit?'pos':'neg'):''}">${e.minProfit>0?money(e.profit):'—'}</div></div>
           <div class="seller-metric"><div class="mlabel">Маржа</div><div class="mvalue ${e.minProfit>0?(e.margin>=0?'pos':'neg'):''}">${e.minProfit>0?pct(e.margin):'—'}</div></div>
@@ -501,7 +509,10 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
         const id=String(inp.dataset.productId||'');
         const field=inp.dataset.costField;
         const prev=sellerCfg(id);
-        sellerCosts[id]={...prev,[field]:Math.max(0,Number(inp.value)||0)};
+        const value=Math.max(0,Number(inp.value)||0);
+        sellerCosts[id]={...prev,[field]:value};
+        if(field==='minProfit'&&value>Number(sellerCosts[id].targetProfit||200)) sellerCosts[id].targetProfit=value;
+        if(field==='targetProfit'&&value<Number(sellerCosts[id].minProfit||150)) sellerCosts[id].targetProfit=Number(sellerCosts[id].minProfit||150);
         saveSellerCosts();
         renderSellerProducts();
       });
