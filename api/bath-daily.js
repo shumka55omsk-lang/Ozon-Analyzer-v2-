@@ -1,6 +1,7 @@
 const APP_BASE=process.env.APP_BASE_URL||'https://ozon-analyzer-v2.vercel.app';
 const OZON_BASE='https://api-seller.ozon.ru';
 const BATH_IDS=new Set(['3768184568','3826876199','2808600941','3768033857']);
+const MIN_PROFIT=150;
 const TARGET_PROFIT=200;
 const COGS=55;
 const PRICE_STEP=0.05;
@@ -186,7 +187,7 @@ function decisionFor(p,fin,analytics,promo,fallbackFixed,changeDay){
   const ownFixed=fin&&n(fin.postingHits)>=5?n(fin.avgDeliveryAndOther):0;
   const fixed=ownFixed||fallbackFixed||120;
   const denom=1-commissionPct/100-acquiringRate;
-  const safeFloor=denom>0?round10((COGS+fixed+TARGET_PROFIT)/denom):0;
+  const safeFloor=denom>0?round10((COGS+fixed+MIN_PROFIT)/denom):0;
   const currentProfit=effective-(effective*commissionPct/100)-n(p.acquiring)-fixed-COGS;
   const promoActive=!!promo;
   const currentPromoPrice=promoActive?n(promo.actionPrice):0;
@@ -231,8 +232,8 @@ function decisionFor(p,fin,analytics,promo,fallbackFixed,changeDay){
       }
     }
   }else if(buyerPrice>OZON_BUYER_TARGET_MAX){
-    if(currentProfit<TARGET_PROFIT){
-      reason='Цена покупателя выше '+OZON_BUYER_TARGET_MAX+' ₽, но прибыль уже ниже '+TARGET_PROFIT+' ₽. Условия конфликтуют — HOLD и сигнал владельцу.';
+    if(currentProfit<MIN_PROFIT){
+      reason='Цена покупателя выше '+OZON_BUYER_TARGET_MAX+' ₽, но прибыль уже ниже '+MIN_PROFIT+' ₽. Условия конфликтуют — HOLD и сигнал владельцу.';
     }else if(promoActive&&currentPromoPrice>0){
       const candidate=lowerStepPrice(currentPromoPrice);
       if(candidate<currentPromoPrice){
@@ -252,9 +253,9 @@ function decisionFor(p,fin,analytics,promo,fallbackFixed,changeDay){
         reason='Цена покупателя выше цели, но ниже защитной цены продавца опускаться нельзя.';
       }
     }
-  }else if(currentProfit<TARGET_PROFIT){
+  }else if(currentProfit<MIN_PROFIT){
     if(promoActive){
-      reason='Цена покупателя уже в целевом коридоре, но прибыль ниже '+TARGET_PROFIT+' ₽. Пока товар в акции, базовую цену автоматически не трогаем — сначала подтверждаем влияние action_price на выплаты.';
+      reason='Цена покупателя уже в целевом коридоре, но прибыль ниже '+MIN_PROFIT+' ₽. Пока товар в акции, базовую цену автоматически не трогаем — сначала подтверждаем влияние action_price на выплаты.';
     }else{
       const buyerHeadroomRatio=OZON_BUYER_TARGET_MAX/buyerPrice;
       const maxByBuyer=currentBase*buyerHeadroomRatio;
@@ -263,7 +264,7 @@ function decisionFor(p,fin,analytics,promo,fallbackFixed,changeDay){
       if(candidate>currentBase&&stable){
         action='RAISE';
         newPrice=candidate;
-        reason='Цена покупателя в коридоре, но прибыль ниже '+TARGET_PROFIT+' ₽. Dry-run использует оставшийся запас до '+OZON_BUYER_TARGET_MAX+' ₽.';
+        reason='Цена покупателя в коридоре, но прибыль ниже '+MIN_PROFIT+' ₽. Dry-run использует оставшийся запас до '+OZON_BUYER_TARGET_MAX+' ₽.';
       }else if(!stable){
         reason='Цена покупателя в коридоре, прибыль ниже цели, но динамика продаж недостаточно стабильна — HOLD.';
       }else{
@@ -271,7 +272,7 @@ function decisionFor(p,fin,analytics,promo,fallbackFixed,changeDay){
       }
     }
   }else{
-    reason='Цена покупателя в целевом коридоре и прибыль не ниже '+TARGET_PROFIT+' ₽ — HOLD.';
+    reason='Цена покупателя в целевом коридоре и прибыль не ниже '+MIN_PROFIT+' ₽ — HOLD.';
   }
 
   const baseAction=['RAISE','LOWER'].includes(action);
@@ -394,7 +395,7 @@ function wbDryRun(wbProducts,wbAnalytics,wbFinance,changeDay){
     const current=p.priceLoaded?n(p.discountedPrice||p.basePrice):0;
     const retention=n(sample?.variableRetention);
     const fixed=n(sample?.fixedMarketplaceCostPerSale);
-    const safe=sample&&retention>0?round10((COGS+TARGET_PROFIT+fixed)/retention):0;
+    const safe=sample&&retention>0?round10((COGS+MIN_PROFIT+fixed)/retention):0;
     const profit=current&&sample&&retention>0?current*retention-fixed-COGS:0;
     const d=genericPriceDecision({
       marketplace:'Wildberries',
@@ -432,7 +433,7 @@ function ymDryRun(ym,ymFinance,changeDay){
     const current=n(p?.price?.value);
     const rate=n(sample?.variableRate);
     const fixed=n(sample?.fixedCostPerUnit);
-    const safe=sample&&rate<1?round10((COGS+TARGET_PROFIT+fixed)/(1-rate)):0;
+    const safe=sample&&rate<1?round10((COGS+MIN_PROFIT+fixed)/(1-rate)):0;
     const profit=current&&sample&&rate<1?current*(1-rate)-fixed-COGS:0;
     const histUnits=(p.stores||[]).reduce((s,x)=>s+n(x?.history14?.units),0);
     const yUnits=(p.stores||[]).reduce((s,x)=>s+n(x?.yesterday?.units),0);
@@ -463,7 +464,7 @@ function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalyti
   const lines=[
     'Маркетплейсы — сидушки для бани · '+date,
     'Режим: ЕДИНЫЙ DRY-RUN · без изменения цен',
-    'Цель: покупателю '+OZON_BUYER_TARGET_MIN+'–'+OZON_BUYER_TARGET_MAX+' ₽ · продавцу не менее '+TARGET_PROFIT+' ₽ прибыли/шт.',
+    'Цель: покупателю '+OZON_BUYER_TARGET_MIN+'–'+OZON_BUYER_TARGET_MAX+' ₽ · продавцу минимум '+MIN_PROFIT+' ₽, цель '+TARGET_PROFIT+' ₽ прибыли/шт.',
     '',
     'OZON'
   ];
