@@ -178,7 +178,7 @@ function wbSummary(item){
   };
 }
 
-function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
+function decisionFor(p,fin,analytics,promo,fallbackFixed,changeDay){
   const currentBase=n(p.basePrice||p.price);
   const effective=n(p.sellerPrice||p.price||currentBase);
   const commissionPct=n(p.salesPercentFbo||p.salesPercentFbs||52);
@@ -188,6 +188,9 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
   const denom=1-commissionPct/100-acquiringRate;
   const safeFloor=denom>0?round10((COGS+fixed+TARGET_PROFIT)/denom):0;
   const currentProfit=effective-(effective*commissionPct/100)-n(p.acquiring)-fixed-COGS;
+  const promoActive=!!promo;
+  const currentPromoPrice=promoActive?n(promo.actionPrice):0;
+  const promoMaxActionPrice=promoActive?n(promo.maxActionPrice):0;
 
   const a=analyticsFor(p.productId,analytics);
   const enoughData=a.baselineOrders>=3;
@@ -195,7 +198,7 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
   const softDrop=enoughData&&a.ratio>=0.60&&a.ratio<0.80;
   const hardDrop=enoughData&&a.ratio<0.60;
 
-  let action='HOLD',reason='',newPrice=currentBase;
+  let action='HOLD',reason='',newPrice=currentBase,newPromoPrice=currentPromoPrice;
   const buyerPrice=n(p.buyerPriceObserved);
   const buyerPriceObservable=!!p.buyerPriceReliable&&buyerPrice>0;
 
@@ -208,14 +211,37 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
   }else if(hardDrop){
     reason='Цена покупателя '+rub(buyerPrice)+', но продажи сильно просели — изменение цены заморожено.';
   }else if(buyerPrice<OZON_BUYER_TARGET_MIN){
-    newPrice=raiseStepPrice(currentBase);
-    if(newPrice>currentBase){
-      action='RAISE';
-      reason='Цена покупателя ниже целевого коридора; повышаем цену продавца не более чем на '+Math.round(PRICE_STEP*100)+'%.';
+    if(promoActive&&currentPromoPrice>0){
+      const cap=Math.min(
+        currentBase||Infinity,
+        promoMaxActionPrice>0?promoMaxActionPrice:Infinity
+      );
+      newPromoPrice=Math.min(cap,raiseStepPrice(currentPromoPrice));
+      if(newPromoPrice>currentPromoPrice){
+        action='RAISE_PROMO';
+        reason='Цена покупателя ниже целевого коридора. Товар в «Эластичном бустинге», поэтому dry-run повышает action_price, а не базовую цену.';
+      }else{
+        reason='Цена покупателя ниже цели, но акционную цену безопасно повысить нельзя.';
+      }
+    }else{
+      newPrice=raiseStepPrice(currentBase);
+      if(newPrice>currentBase){
+        action='RAISE';
+        reason='Цена покупателя ниже целевого коридора; повышаем цену продавца не более чем на '+Math.round(PRICE_STEP*100)+'%.';
+      }
     }
   }else if(buyerPrice>OZON_BUYER_TARGET_MAX){
     if(currentProfit<TARGET_PROFIT){
       reason='Цена покупателя выше '+OZON_BUYER_TARGET_MAX+' ₽, но прибыль уже ниже '+TARGET_PROFIT+' ₽. Условия конфликтуют — HOLD и сигнал владельцу.';
+    }else if(promoActive&&currentPromoPrice>0){
+      const candidate=lowerStepPrice(currentPromoPrice);
+      if(candidate<currentPromoPrice){
+        action='LOWER_PROMO';
+        newPromoPrice=candidate;
+        reason='Цена покупателя выше целевого коридора; dry-run снижает action_price одним безопасным шагом.';
+      }else{
+        reason='Цена покупателя выше цели, но акционную цену безопасно снизить нельзя.';
+      }
     }else{
       const candidate=Math.max(safeFloor,lowerStepPrice(currentBase));
       if(candidate<currentBase){
@@ -227,27 +253,35 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
       }
     }
   }else if(currentProfit<TARGET_PROFIT){
-    const buyerHeadroomRatio=OZON_BUYER_TARGET_MAX/buyerPrice;
-    const maxByBuyer=currentBase*buyerHeadroomRatio;
-    const maxStep=currentBase*(1+PRICE_STEP);
-    const candidate=Math.floor(Math.min(maxByBuyer,maxStep)/5)*5;
-    if(candidate>currentBase&&stable){
-      action='RAISE';
-      newPrice=candidate;
-      reason='Цена покупателя в коридоре, но прибыль ниже '+TARGET_PROFIT+' ₽. Dry-run использует оставшийся запас до '+OZON_BUYER_TARGET_MAX+' ₽.';
-    }else if(!stable){
-      reason='Цена покупателя в коридоре, прибыль ниже цели, но динамика продаж недостаточно стабильна — HOLD.';
+    if(promoActive){
+      reason='Цена покупателя уже в целевом коридоре, но прибыль ниже '+TARGET_PROFIT+' ₽. Пока товар в акции, базовую цену автоматически не трогаем — сначала подтверждаем влияние action_price на выплаты.';
     }else{
-      reason='Цена покупателя уже у верхней границы '+OZON_BUYER_TARGET_MAX+' ₽; повышать цену продавца без выхода из коридора нельзя.';
+      const buyerHeadroomRatio=OZON_BUYER_TARGET_MAX/buyerPrice;
+      const maxByBuyer=currentBase*buyerHeadroomRatio;
+      const maxStep=currentBase*(1+PRICE_STEP);
+      const candidate=Math.floor(Math.min(maxByBuyer,maxStep)/5)*5;
+      if(candidate>currentBase&&stable){
+        action='RAISE';
+        newPrice=candidate;
+        reason='Цена покупателя в коридоре, но прибыль ниже '+TARGET_PROFIT+' ₽. Dry-run использует оставшийся запас до '+OZON_BUYER_TARGET_MAX+' ₽.';
+      }else if(!stable){
+        reason='Цена покупателя в коридоре, прибыль ниже цели, но динамика продаж недостаточно стабильна — HOLD.';
+      }else{
+        reason='Цена покупателя уже у верхней границы '+OZON_BUYER_TARGET_MAX+' ₽; повышать цену продавца без выхода из коридора нельзя.';
+      }
     }
   }else{
     reason='Цена покупателя в целевом коридоре и прибыль не ниже '+TARGET_PROFIT+' ₽ — HOLD.';
   }
 
-  const recommendedPrice=action==='HOLD'?effective:newPrice;
+  const baseAction=['RAISE','LOWER'].includes(action);
+  const promoAction=['RAISE_PROMO','LOWER_PROMO'].includes(action);
+  const recommendedPrice=baseAction?newPrice:effective;
   const recommendedProfit=recommendedPrice-(recommendedPrice*commissionPct/100)-(recommendedPrice*acquiringRate)-fixed-COGS;
-  const recommendedBuyerEstimate=buyerPriceObservable&&effective>0
-    ?buyerPrice*(recommendedPrice/effective)
+  const recommendedBuyerEstimate=buyerPriceObservable
+    ?(promoAction&&currentPromoPrice>0
+      ?buyerPrice*(newPromoPrice/currentPromoPrice)
+      :(effective>0?buyerPrice*(recommendedPrice/effective):0))
     :0;
   return {
     marketplace:'Ozon',
@@ -279,7 +313,10 @@ function decisionFor(p,fin,analytics,promoActive,fallbackFixed,changeDay){
     recommendedPrice:r2(recommendedPrice),
     recommendedProfit:r2(recommendedProfit),
     recommendedBuyerEstimate:r2(recommendedBuyerEstimate),
-    promoActive:!!promoActive,
+    promoActive,
+    currentPromoPrice:r2(currentPromoPrice),
+    recommendedPromoPrice:r2(promoAction?newPromoPrice:currentPromoPrice),
+    promoMaxActionPrice:r2(promoMaxActionPrice),
     reason
   };
 }
@@ -431,11 +468,12 @@ function buildReport(date,decisions,mode,promoRemoved,analyticsLimited,wbAnalyti
     'OZON'
   ];
   for(const d of decisions){
-    const arrow=d.action==='RAISE'?' ↑':d.action==='LOWER'?' ↓':'';
+    const arrow=['RAISE','RAISE_PROMO'].includes(d.action)?' ↑':['LOWER','LOWER_PROMO'].includes(d.action)?' ↓':'';
     lines.push(
       d.color+': '+d.yesterdayOrders+' заказ(ов) вчера · '+rub(d.yesterdayRevenue),
       'Покупатель: '+(d.buyerPriceReliable?rub(d.buyerPriceObserved)+' медиана · '+d.buyerPriceSample+' шт. ('+(d.buyerPriceType||'Ozon')+')':'не удалось получить')+' · цель '+OZON_BUYER_TARGET_MIN+'–'+OZON_BUYER_TARGET_MAX+' ₽',
-      'Цена продавца: '+rub(d.effective)+' → '+rub(d.recommendedPrice)+(d.recommendedBuyerEstimate?' · покупателю оценочно '+rub(d.recommendedBuyerEstimate):''),
+      'Цена продавца: '+rub(d.effective)+' → '+rub(d.recommendedPrice),
+      ...(d.promoActive?['Акция: '+rub(d.currentPromoPrice)+' → '+rub(d.recommendedPromoPrice)+' · максимум Ozon '+rub(d.promoMaxActionPrice)+(d.recommendedBuyerEstimate?' · покупателю оценочно '+rub(d.recommendedBuyerEstimate):'')]:[]),
       'Прибыль: сейчас ≈ '+rub(d.currentProfit)+' · при рекомендации ≈ '+rub(d.recommendedProfit),
       '2 дня к фону: '+(d.baselineOrders>0?(d.trendPct>=0?'+':'')+d.trendPct+'%':'нет базы'),
       'DRY-RUN: '+d.action+arrow+' — '+d.reason,
@@ -532,6 +570,7 @@ module.exports=async function handler(req,res){
 
     const promoItems=(promos.found||[]).filter(x=>Number(x.actionId)===ELASTIC_BOOSTING_ACTION_ID);
     const promoSet=new Set(promoItems.map(x=>String(x.productId)));
+    const promoMap=Object.fromEntries(promoItems.map(x=>[String(x.productId),x]));
     const managePromos=String(process.env.OZON_MANAGE_PROMOS_ENABLED||'').toLowerCase()==='true';
     const autoprice=String(process.env.OZON_AUTOPRICE_ENABLED||'').toLowerCase()==='true';
     const hasWriteKey=!!process.env.OZON_PRICE_API_KEY;
@@ -553,7 +592,9 @@ module.exports=async function handler(req,res){
     const nowOmsk=new Date(Date.now()+6*60*60*1000);
     const changeDay=CHANGE_WEEKDAYS.has(nowOmsk.getUTCDay())&&!promoRemoved;
     const decisions=products.map(p=>decisionFor(
-      p,finMap[String(p.productId)],analytics,promoSet.has(String(p.productId))&&!promoRemoved,fallbackFixed,changeDay
+      p,finMap[String(p.productId)],analytics,
+      (!promoRemoved?promoMap[String(p.productId)]||null:null),
+      fallbackFixed,changeDay
     ));
 
     const writes=[];
