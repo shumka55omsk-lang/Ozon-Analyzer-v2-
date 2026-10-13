@@ -10,6 +10,24 @@
   "observationMaxAgeHours": 24,
   "maxPriceStep": 0.05,
   "products": {
+    "2808600941": {
+      "cogs": 55,
+      "extra": 5,
+      "targetProfit": 100,
+      "stageStartedAt": null,
+      "scheme": null,
+      "competitors": [
+        "5459795463"
+      ]
+    },
+    "3768033857": {
+      "cogs": 55,
+      "extra": 0,
+      "targetProfit": 100,
+      "stageStartedAt": null,
+      "scheme": null,
+      "competitors": []
+    },
     "3768184568": {
       "cogs": 55,
       "extra": 0,
@@ -19,24 +37,6 @@
       "competitors": []
     },
     "3826876199": {
-      "cogs": 55,
-      "extra": 0,
-      "targetProfit": 100,
-      "stageStartedAt": null,
-      "scheme": null,
-      "competitors": []
-    },
-    "2808600941": {
-      "cogs": 55,
-      "extra": 0,
-      "targetProfit": 100,
-      "stageStartedAt": null,
-      "scheme": null,
-      "competitors": [
-        "5459795463"
-      ]
-    },
-    "3768033857": {
       "cogs": 55,
       "extra": 0,
       "targetProfit": 100,
