@@ -79,7 +79,7 @@ module.exports=async function handler(req,res){
     const skuMap=await bathSkuMap();
     const today=new Date();
     const yesterday=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate()-1));
-    const from=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate()-8));
+    const from=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate()-14));
     const base={
       date_from:dstr(from),
       date_to:dstr(yesterday),

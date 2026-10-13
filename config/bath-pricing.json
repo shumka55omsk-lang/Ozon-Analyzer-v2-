@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "minProfit": 100,
+  "targetProfit": 100,
+  "profitStep": 10,
+  "observationDays": 7,
+  "stableOrderRatio": 0.9,
+  "minWindowOrders": 21,
+  "competitorGap": 10,
+  "observationMaxAgeHours": 24,
+  "maxPriceStep": 0.05,
+  "products": {
+    "3768184568": {"cogs": 55, "extra": 0, "targetProfit": 100, "stageStartedAt": null, "scheme": null, "competitors": []},
+    "3826876199": {"cogs": 55, "extra": 0, "targetProfit": 100, "stageStartedAt": null, "scheme": null, "competitors": []},
+    "2808600941": {"cogs": 55, "extra": 0, "targetProfit": 100, "stageStartedAt": null, "scheme": null, "competitors": []},
+    "3768033857": {"cogs": 55, "extra": 0, "targetProfit": 100, "stageStartedAt": null, "scheme": null, "competitors": []}
+  }
+}

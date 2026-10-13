@@ -117,12 +117,13 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
       </label>
       <button id="sellerRefreshBtn" class="primary" type="button">Обновить из Ozon</button>
     </div>
+    <div id="bathStrategyStatus" class="status">Загружаю рабочую стратегию…</div>
     <div class="bath-shared">
-      <div class="bath-shared-title">Общие параметры для всех сидушек</div>
+      <div class="bath-shared-title">Локальный сценарий расчёта — не изменяет рабочую стратегию</div>
       <label>Себестоимость, ₽<input id="bathSharedCogs" type="number" min="0" step="1" value="55"></label>
       <label>Прочие расходы / шт., ₽<input id="bathSharedExtra" type="number" min="0" step="1" placeholder="например 80"></label>
-      <label>Минимальная прибыль / шт., ₽<input id="bathSharedProfit" type="number" min="0" step="1" value="200"></label>
-      <button id="bathApplyAllBtn" type="button">Применить ко всем 4</button>
+      <label>Минимальная прибыль / шт., ₽<input id="bathSharedProfit" type="number" min="100" step="10" value="100"></label>
+      <button id="bathApplyAllBtn" type="button">Рассчитать для всех 4</button>
     </div>
     <div id="sellerStatus" class="status">Подключаю магазин Ozon…</div>
     <div class="seller-summary">
@@ -136,7 +137,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     </div>
     <div class="note seller-economy-note">
       Для защиты от акций ориентируемся на цену после акций продавца и поле Ozon «Ограничение для акций и стратегий». 
-      «Рекомендуемое ограничение» — минимальная цена, при которой покрываются текущая комиссия и эквайринг Ozon, фактическая логистика и прочие удержания за последние 14 дней, себестоимость, ваши дополнительные расходы и заданная прибыль 200 ₽. 
+      «Рекомендуемое ограничение» — минимальная цена, при которой покрываются текущая комиссия и эквайринг Ozon, оценка логистики и прочих удержаний за последние 14 дней, себестоимость, ваши дополнительные расходы и выбранная цель прибыли. Рабочая стратегия начинается со 100 ₽, затем рассматривает ступени +10 ₽. Поля ниже — локальный сценарий; они не сохраняют настройки ежедневного расчёта на сервере.
       Никакие цены в Ozon сейчас автоматически не меняются.
     </div>
   </section>
@@ -360,6 +361,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   let autoProductMeta = {category:'',seller:'',rating:'',source:'ручной ввод'};
 
   const BATH_SEAT_IDS = new Set(['3768184568','3826876199','2808600941','3768033857']);
+  let serverPolicy = null;
   let sellerProducts = [];
   let sellerCosts = loadSellerCosts();
   let bathFinanceByProduct = {};
@@ -367,20 +369,27 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   let bathFinanceLoaded = false;
 
   function loadSellerCosts(){
-    try{return JSON.parse(localStorage.getItem('ozonSellerCostsV1')||'{}')||{};}catch{return {}}
+    try{
+      const current=localStorage.getItem('ozonSellerCostsV2');
+      if(current) return JSON.parse(current)||{};
+      const previous=JSON.parse(localStorage.getItem('ozonSellerCostsV1')||'{}')||{};
+      // Preserve local cost notes, but old 150/200 profit defaults are not an approval.
+      return Object.fromEntries(Object.entries(previous).map(([id,x])=>[id,{cogs:x.cogs,extra:x.extra}]));
+    }catch{return {}}
   }
   function saveSellerCosts(){
-    localStorage.setItem('ozonSellerCostsV1',JSON.stringify(sellerCosts));
+    localStorage.setItem('ozonSellerCostsV2',JSON.stringify(sellerCosts));
   }
   function sellerCfg(productId){
     const k=String(productId||'');
-    const saved=sellerCosts[k]||{};
+    const defaults=serverPolicy?.products?.[k]||{};
+    const saved={...defaults,...sellerCosts[k]};
     if(BATH_SEAT_IDS.has(k)){
       return {
         cogs:Number(saved.cogs)>0?Number(saved.cogs):55,
         extra:Math.max(0,Number(saved.extra)||0),
-        minProfit:Number(saved.minProfit)>0?Number(saved.minProfit):150,
-        targetProfit:Number(saved.targetProfit)>0?Number(saved.targetProfit):200
+        minProfit:Number(saved.minProfit)>0?Number(saved.minProfit):100,
+        targetProfit:Number(saved.targetProfit)>0?Number(saved.targetProfit):100
       };
     }
     return {cogs:Math.max(0,Number(saved.cogs)||0),extra:Math.max(0,Number(saved.extra)||0),minProfit:Math.max(0,Number(saved.minProfit)||0),targetProfit:Math.max(0,Number(saved.targetProfit)||0)};
@@ -398,20 +407,20 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     const cogs=Math.max(0,Number(cfg.cogs)||0);
     const extra=Math.max(0,Number(cfg.extra)||0);
     const minProfit=Math.max(0,Number(cfg.minProfit)||0);
-    const targetProfit=Math.max(minProfit,Number(cfg.targetProfit)||200);
+    const targetProfit=Math.max(minProfit,Number(cfg.targetProfit)||100);
     const finance=bathFinanceByProduct[String(p.productId||'')]||null;
-    const historicalFixed=finance&&Number(finance.postingHits)>0
+    const historicalFixed=finance&&Number(finance.postingHits)>=5
       ? Math.max(0,Number(finance.avgDeliveryAndOther)||0)
-      : Math.max(0,Number(bathFinanceFallbackFixed)||0);
-    const financeSource=finance&&Number(finance.postingHits)>0?'fact':(historicalFixed>0?'estimate':'none');
+      : Math.max(0,Number(bathFinanceFallbackFixed)||120);
+    const financeSource=finance&&Number(finance.postingHits)>=5?'fact':(historicalFixed>0?'estimate':'none');
     const profit=revenue-commission-acquiring-historicalFixed-cogs-extra;
     const margin=revenue>0?profit/revenue*100:0;
     const acquiringPct=revenue>0?acquiring/revenue*100:0;
     const rate=(commissionPct+acquiringPct)/100;
-    const safeRaw=rate<1?(cogs+extra+minProfit+historicalFixed)/(1-rate):0;
+    const safeRaw=rate<1?(cogs+extra+targetProfit+historicalFixed)/(1-rate):0;
     const safePrice=safeRaw>0?Math.ceil(safeRaw/10)*10:0;
     const filled=cogs>0 && extra>=0 && minProfit>0;
-    const belowTarget=filled && profit<minProfit;
+    const belowTarget=filled && profit<targetProfit;
     const minPriceTooLow=filled && Number(p.minPrice||0)<safePrice;
     return {cfg,revenue,commissionPct,commission,acquiring,cogs,extra,minProfit,targetProfit,historicalFixed,financeSource,finance,profit,margin,safePrice,filled,belowTarget,minPriceTooLow};
   }
@@ -424,10 +433,10 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   function sellerStatusChip(e){
     if(e.minProfit<=0) return '<span class="status-chip muted">Задайте мин. прибыль</span>';
     if(e.profit<0) return '<span class="status-chip bad">Убыток</span>';
-    if(e.belowTarget) return '<span class="status-chip bad">Ниже минимума</span>';
-    if(e.profit<e.targetProfit) return '<span class="status-chip muted">Допустимая прибыль</span>';
+    if(e.belowTarget) return '<span class="status-chip bad">Ниже цели</span>';
+    if(e.profit<e.targetProfit) return '<span class="status-chip muted">Ниже цели</span>';
     if(e.minPriceTooLow) return '<span class="status-chip bad">Поднять ограничение акций</span>';
-    return '<span class="status-chip good">Защищено</span>';
+    return '<span class="status-chip good">Расчёт выше цели</span>';
   }
   function renderSellerSummary(){
     const econ=sellerProducts.map(sellerEconomy);
@@ -486,7 +495,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
           <div class="seller-metric">
             <div class="mlabel">Логистика и услуги Ozon / шт.</div>
             <div class="mvalue">${e.historicalFixed>0?money(e.historicalFixed):'—'}</div>
-            <div class="small">${e.financeSource==='fact'?'по '+Number(e.finance?.postingHits||0)+' начислениям за 14 дней':(e.financeSource==='estimate'?'оценка по другим цветам':'нет истории')}</div>
+            <div class="small">${e.financeSource==='fact'?'по '+Number(e.finance?.postingHits||0)+' начислениям за 14 дней':(e.financeSource==='estimate'?'оценка / резерв 120 ₽':'нет истории')}</div>
           </div>
           <div class="seller-metric">
             <div class="mlabel">Мин. прибыль / шт.</div>
@@ -495,7 +504,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
           <div class="seller-metric">
             <div class="mlabel">Целевая прибыль / шт.</div>
             <input class="edit-cost" data-cost-field="targetProfit" data-product-id="${escapeHtml(p.productId)}" type="number" min="${e.minProfit}" step="1" value="${e.targetProfit}" placeholder="₽">
-            <div class="small">Допустимый диапазон: ${money(e.minProfit)}–${money(e.targetProfit)}</div>
+            <div class="small">Локальная цель: ${money(e.targetProfit)}; не разрешает снижение цены</div>
           </div>
           <div class="seller-metric"><div class="mlabel">Текущее ограничение акций</div><div class="mvalue">${Number(p.minPrice)>0?money(Number(p.minPrice)):'—'}</div></div>
           <div class="seller-metric"><div class="mlabel">Расчётная прибыль</div><div class="mvalue ${e.minProfit>0?(e.profit>=e.minProfit?'pos':'neg'):''}">${e.minProfit>0?money(e.profit):'—'}</div></div>
@@ -511,14 +520,28 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
         const prev=sellerCfg(id);
         const value=Math.max(0,Number(inp.value)||0);
         sellerCosts[id]={...prev,[field]:value};
-        if(field==='minProfit'&&value>Number(sellerCosts[id].targetProfit||200)) sellerCosts[id].targetProfit=value;
-        if(field==='targetProfit'&&value<Number(sellerCosts[id].minProfit||150)) sellerCosts[id].targetProfit=Number(sellerCosts[id].minProfit||150);
+        if(field==='minProfit'&&value>Number(sellerCosts[id].targetProfit||100)) sellerCosts[id].targetProfit=value;
+        if(field==='targetProfit'&&value<Number(sellerCosts[id].minProfit||100)) sellerCosts[id].targetProfit=Number(sellerCosts[id].minProfit||100);
         saveSellerCosts();
         renderSellerProducts();
       });
       inp.addEventListener('keydown',e=>{if(e.key==='Enter'){inp.blur();}});
     });
     renderSellerSummary();
+  }
+
+  async function loadBathPolicy(){
+    const box=document.getElementById('bathStrategyStatus');
+    try{
+      const response=await fetch('/api/bath-policy',{cache:'no-store'});
+      const data=await response.json();
+      if(!response.ok||!data.ok) throw new Error('Стратегия недоступна');
+      serverPolicy=data.policy;
+      box.textContent='Рабочая стратегия: старт '+serverPolicy.minProfit+' ₽/шт.; ступень +'+serverPolicy.profitStep+' ₽ после '+serverPolicy.observationDays+' полных дней стабильных заказов. Конкурент − '+serverPolicy.competitorGap+' ₽. Снижение требует подтверждения. Dry-run: цены не меняются. Мониторинг конкурентов ещё не подключён.';
+    }catch(e){
+      serverPolicy=null;
+      box.textContent='Рабочая стратегия не загрузилась. Ниже только локальный расчёт, не параметры автоматизации.';
+    }
   }
 
   async function loadBathFinance(){
@@ -555,6 +578,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
       if(!r.ok||!data.ok) throw new Error(data.error||('HTTP '+r.status));
       sellerProducts=(Array.isArray(data.products)?data.products:[]).filter(p=>BATH_SEAT_IDS.has(String(p.productId||'')));
       let financeWarning='';
+      await loadBathPolicy();
       try{await loadBathFinance();}
       catch(fe){financeWarning=' Финансовые расходы пока не загрузились: '+(fe?.message||fe)+'.';}
       renderSellerProducts();
@@ -995,7 +1019,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     const extra=Math.max(0,Number(document.getElementById('bathSharedExtra')?.value)||0);
     const minProfit=Math.max(0,Number(document.getElementById('bathSharedProfit')?.value)||0);
     for(const id of BATH_SEAT_IDS){
-      sellerCosts[id]={cogs:cogs||55,extra,minProfit:minProfit||200};
+      sellerCosts[id]={...sellerCfg(id),cogs:cogs||55,extra,minProfit:Math.max(100,minProfit),targetProfit:Math.max(100,minProfit)};
     }
     saveSellerCosts();
     renderSellerProducts();
