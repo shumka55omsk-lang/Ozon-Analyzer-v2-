@@ -232,6 +232,7 @@ module.exports=async function handler(req,res){
     const today=new Date();
     const days=14;
     let accrualRows=0;
+    const reconciliationSamples=[];
 
     for(let offset=days-1;offset>=0;offset--){
       const d=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate()-offset));
@@ -241,6 +242,14 @@ module.exports=async function handler(req,res){
 
       for(const acc of accruals){
         const posting=acc?.posting;
+        if(posting?.products?.some(p=>String(p.sku)==='2921050259') && reconciliationSamples.length<12){
+          reconciliationSamples.push({
+            accrualKeys:Object.keys(acc),postingKeys:Object.keys(posting),
+            category:acc.accrued_category,typeId:acc.type_id,type:typeMap[String(acc.type_id)],
+            totalAmount:acc.total_amount,deliverySchema:posting.delivery_schema,
+            products:posting.products.map(p=>({sku:p.sku,quantity:p.quantity,commission:p.commission,delivery:p.delivery}))
+          });
+        }
         if(posting&&Array.isArray(posting.products)){
           for(const prod of posting.products){
             const sku=String(prod?.sku??'');
@@ -365,6 +374,7 @@ module.exports=async function handler(req,res){
       ok:true,
       periodDays:days,
       accrualRows,
+      reconciliationSamples,
       fbsBuyerPrices,
       items,
       note:'fbsBuyerPrices.customerPrice — customer_price из /v4/posting/fbs/list с financial_data=true, то есть фактическая цена покупателя в отправлениях FBS. realizedPriceFields оставлен для сверки начислений. Расходы уровня продавца без привязки к SKU не распределяются.'
