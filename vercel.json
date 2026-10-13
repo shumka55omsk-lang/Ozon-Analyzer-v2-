@@ -13,5 +13,11 @@
       "path": "/api/bath-daily",
       "schedule": "5 2 * * *"
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/bath-policy",
+      "destination": "/api/seller-products?policy=1"
+    }
   ]
 }

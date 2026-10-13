@@ -439,6 +439,7 @@ async function observeStorefrontPrice(sku) {
 }
 
 module.exports = async function handler(req, res) {
+  if(req.query?.policy === '1') return require('../lib/bath-policy-handler')(req,res);
   if (req.method !== 'GET') {
     return send(res, 405, { ok: false, error: 'Используйте GET' });
   }
