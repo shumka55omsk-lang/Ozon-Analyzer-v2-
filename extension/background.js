@@ -24,17 +24,21 @@ function waitForTabComplete(tabId, timeoutMs = 25000) {
 }
 
 async function sendExtract(tabId) {
-  let lastErr;
+  let lastErr, lastResult;
   for (let i = 0; i < 6; i++) {
     try {
       const result = await chrome.tabs.sendMessage(tabId, { type: 'OZON_EXTRACT_PAGE' });
-      if (result?.ok) return result;
+      if (result?.ok) {
+        lastResult=result;
+        if(result.product?.priceDetails?.labelVerified || i>=2) return result;
+      }
       if (result?.error) lastErr = new Error(result.error);
     } catch (e) {
       lastErr = e;
     }
     await sleep(900);
   }
+  if(lastResult) return lastResult;
   throw lastErr || new Error('Не удалось прочитать карточку Ozon');
 }
 

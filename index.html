@@ -207,7 +207,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
             <button class="primary" id="loadOzonBtn" type="button">Загрузить из Ozon</button>
           </div>
           <div id="loadStatus" class="status">Вставьте ссылку на карточку и нажмите «Загрузить из Ozon».</div>
-          <div class="browser-helper" id="browserHelper"><b>Надёжная загрузка через Chrome:</b> <span id="extensionState">проверяю расширение…</span> · <a href="ozon-browser-import-extension.zip" download>Скачать расширение</a><br><span class="small">Установить один раз: chrome://extensions → Режим разработчика → «Загрузить распакованное расширение» → выбрать папку <b>extension</b>.</span></div>
+          <div class="browser-helper" id="browserHelper"><b>Надёжная загрузка через Chrome:</b> <span id="extensionState">проверяю расширение…</span> · <a href="ozon-browser-import-extension.zip?v=1.1.0" download>Скачать расширение</a><br><span class="small">Установить один раз: chrome://extensions → Режим разработчика → «Загрузить распакованное расширение» → выбрать папку <b>extension</b>.</span></div>
           <div class="auto-meta">
             <div class="meta-pill"><b>Категория</b><span id="metaCategory">—</span></div>
             <div class="meta-pill"><b>Продавец</b><span id="metaSeller">—</span></div>
@@ -820,6 +820,11 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     renderMeta(); render();
     const found=[]; if(p.name)found.push('название'); if(p.price)found.push('цену'); if(p.weightKg)found.push('вес'); if(p.lengthCm||p.widthCm||p.heightCm)found.push('габариты');
     let msg='Карточка загружена'; if(found.length)msg+=': '+found.join(', ')+'.'; else msg+=' частично.';
+    if(p.priceDetails){
+      const pd=p.priceDetails;
+      if(pd.bankPartnerPrice) msg+=' С банками-партнёрами: '+money(pd.bankPartnerPrice)+'.';
+      if(pd.otherBanksPrice) msg+=' С другими банками: '+money(pd.otherBanksPrice)+'.';
+    }
     if(data?.warning) msg+=' '+data.warning;
     setLoadStatus(msg, data?.warning?'warn':'ok');
   }
@@ -850,6 +855,8 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
   async function loadViaExtension(url){
     const pong=await bridgeRequest('OZON_ANALYZER_PING',{},1200);
     if(!pong?.ok) throw new Error('Расширение Chrome не найдено');
+    const state=document.getElementById('extensionState');
+    if(state){state.textContent='установлено, версия '+(pong.version||'неизвестна');state.style.color='var(--good)';}
     setLoadStatus('Открываю карточку Ozon через ваш Chrome и считываю данные…');
     const data=await bridgeRequest('OZON_ANALYZER_REQUEST',{url},32000);
     if(!data?.ok) throw new Error(data?.error||'Расширение не смогло прочитать карточку');

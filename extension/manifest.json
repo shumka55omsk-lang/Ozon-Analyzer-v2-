@@ -1,17 +1,26 @@
 {
   "manifest_version": 3,
   "name": "Ozon → Калькулятор маржинальности",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Загружает открытую карточку Ozon в калькулятор через обычный браузер, обходя блокировку серверных запросов.",
-  "permissions": ["tabs"],
-  "host_permissions": ["https://*.ozon.ru/*"],
+  "permissions": [
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.ozon.ru/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "prices.js",
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],

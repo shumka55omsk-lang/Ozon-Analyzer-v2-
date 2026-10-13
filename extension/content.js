@@ -64,20 +64,20 @@ function parseDims(text) {
   return { lengthCm: null, widthCm: null, heightCm: null };
 }
 function pickCurrentPrice(ld) {
-  const values = [];
-  const push = v => { const n = Number(String(v ?? '').replace(/[^0-9.,]/g, '').replace(',', '.')); if (Number.isFinite(n) && n > 0) values.push(n); };
-  push(ld?.offers?.price);
-  push(meta('product:price:amount'));
-  for (const name of ['webPrice','webSale','webStickyProducts']) {
-    const node = getWidget(name);
-    if (node) values.push(...rubles(node.innerText));
+  const texts=[];
+  for(const name of ['webPrice','webSale','webStickyProducts']){
+    const node=getWidget(name);
+    if(node) texts.push(node.innerText||'');
   }
-  if (!values.length) {
-    const topText = txt(document.body?.innerText || '').slice(0, 12000);
-    values.push(...rubles(topText).slice(0, 8));
-  }
-  const sane = values.filter(n => n >= 10 && n <= 10000000);
-  return sane.length ? sane[0] : null;
+  const details=OzonPriceParser.parseVisiblePrices(texts);
+  const fallback=Number(ld?.offers?.price||meta('product:price:amount'));
+  const ordinary=details.otherBanksPrice;
+  const price=details.bankPartnerPrice||ordinary||(Number.isFinite(fallback)&&fallback>0?fallback:null);
+  return {...details,price,observedAt:new Date().toISOString(),
+    comparisonReady:false,
+    priceWarning:details.bankPartnerPrice
+      ?'Считана цена с банками-партнёрами. Для сравнения нужно совпадение региона, банка и условий скидки.'
+      :'Банковская цена не подтверждена. Загруженная цена не используется как цена со всеми скидками.'};
 }
 function extractCategory() {
   const links = [...document.querySelectorAll('a[href*="/category/"]')]
@@ -110,7 +110,8 @@ function extractOzonProduct() {
   const ld = getJsonLd();
   const heading = getWidget('webProductHeading')?.querySelector('h1') || document.querySelector('h1');
   const name = txt(heading?.innerText || ld?.name || meta('og:title') || document.title).replace(/\s*[|—-]\s*OZON.*$/i, '');
-  const price = pickCurrentPrice(ld);
+  const priceDetails = pickCurrentPrice(ld);
+  const price = priceDetails.price;
   const weightKg = parseWeightKg(bodyText);
   const dims = parseDims(bodyText);
   const image = txt(Array.isArray(ld?.image) ? ld.image[0] : ld?.image || meta('og:image'));
@@ -118,6 +119,7 @@ function extractOzonProduct() {
     sku: txt(ld?.sku) || getSku(),
     name,
     price,
+    priceDetails,
     category: txt(ld?.category) || extractCategory(),
     seller: extractSeller(bodyText),
     rating: extractRating(ld),
@@ -126,7 +128,7 @@ function extractOzonProduct() {
     ...dims
   };
   if (!product.name && !product.price) return { ok: false, error: 'Карточка открылась, но название и цена не найдены' };
-  return { ok: true, source: 'Chrome / страница Ozon', product, warning: (!weightKg && !dims.lengthCm) ? 'Название и цена получены; габариты/вес не найдены на видимой странице — проверьте вручную.' : '' };
+  return { ok: true, source: 'Chrome / страница Ozon', product, warning: priceDetails.priceWarning + ((!weightKg && !dims.lengthCm) ? ' Габариты/вес не найдены — проверьте вручную.' : '') };
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
