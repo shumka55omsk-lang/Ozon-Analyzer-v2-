@@ -437,15 +437,15 @@ module.exports=async function handler(req,res){
       const sample=n(chosen.count);
       const median=n(chosen.median);
       p.buyerPriceObserved=sample>=5&&median>0?median:null;
-      p.buyerPriceReliable=sample>=5&&median>0;
+      p.buyerPriceReliable=finance.fbsBuyerPrices?.finalBuyerPriceVerified===true&&sample>=5&&median>0;
       p.buyerPriceType=useRecent?'Ozon customer_price · 48ч медиана':'Ozon customer_price · 7д медиана';
       p.buyerPriceSample=sample;
       p.buyerPriceInTarget=n(chosen.in220to240);
       p.buyerPriceAvg=n(chosen.avg);
     }
-    let reliable=(finance.items||[]).filter(x=>n(x.postingHits)>=5).map(x=>n(x.avgDeliveryAndOther));
-    if(!reliable.length) reliable=(finance.items||[]).filter(x=>n(x.postingHits)>0).map(x=>n(x.avgDeliveryAndOther));
-    const fallbackFixed=median(reliable)||120;
+    // Incomplete period ledgers must never replace the conservative preview reserve.
+    const reliable=(finance.items||[]).filter(x=>x.unitEconomicsVerified===true && n(x.postingHits)>=5 && Number.isFinite(x.avgDeliveryAndOther) && x.avgDeliveryAndOther>=0).map(x=>x.avgDeliveryAndOther);
+    const fallbackFixed=reliable.length?median(reliable):120;
 
     const promoItems=(promos.found||[]).filter(x=>Number(x.actionId)===ELASTIC_BOOSTING_ACTION_ID);
     const promoSet=new Set(promoItems.map(x=>String(x.productId)));

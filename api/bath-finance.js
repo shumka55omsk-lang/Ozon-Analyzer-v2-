@@ -1,3 +1,4 @@
+const {aggregateAccruals}=require('../lib/bath-finance-ledger');
 const BASE='https://api-seller.ozon.ru';
 const BATH_PRODUCT_IDS=['3768184568','3826876199','2808600941','3768033857'];
 
@@ -86,10 +87,11 @@ async function dayAccruals(date){
     const part=Array.isArray(data?.accruals)?data.accruals:[];
     out.push(...part);
     const next=String(data?.last_id||'');
-    if(!next||!part.length||next===lastId) break;
+    if(!next) return out;
+    if(!part.length||next===lastId) throw new Error('Неполная выгрузка начислений: курсор не продвигается');
     lastId=next;
   }
-  return out;
+  throw new Error('Неполная выгрузка начислений: превышен лимит страниц');
 }
 
 
@@ -110,6 +112,8 @@ async function fbsCustomerPrices(products){
   const since=new Date(now.getTime()-7*24*60*60*1000).toISOString();
   const to=now.toISOString();
   let cursor='';
+  const seenPostings=new Set();
+  let complete=false;
 
   try{
     for(let page=0;page<20;page++){
@@ -129,6 +133,11 @@ async function fbsCustomerPrices(products){
       const data=await ozonPost('/v4/posting/fbs/list',body,'finance');
       const postings=Array.isArray(data?.postings)?data.postings:[];
       for(const posting of postings){
+        if(posting.status!=='delivered') continue;
+        const postingId=String(posting.posting_number||'');
+        if(!postingId) throw new Error('Отправление без идентификатора');
+        if(seenPostings.has(postingId)) continue;
+        seenPostings.add(postingId);
         const postingTime=Date.parse(
           posting?.in_process_at||
           posting?.order_date||
@@ -141,7 +150,8 @@ async function fbsCustomerPrices(products){
           const sku=String(x?.product_id??x?.sku??'');
           if(!skuSet.has(sku)) continue;
           const r=rows[sku];
-          const qty=Math.max(1,Number(x?.quantity)||1);
+          const qty=Number(x?.quantity);
+          if(!Number.isInteger(qty)||qty<=0) throw new Error('Не указано количество товара в отправлении');
           const customer=money(x?.customer_price);
           const seller=money(x?.price??x?.seller_price);
           if(customer>0){
@@ -163,12 +173,16 @@ async function fbsCustomerPrices(products){
 
       const next=String(data?.cursor||'');
       const hasNext=!!data?.has_next;
-      if(!hasNext||!next||next===cursor||!postings.length) break;
+      if(!hasNext){complete=true;break;}
+      if(!next||next===cursor||!postings.length) throw new Error('Неполная выгрузка отправлений');
       cursor=next;
     }
 
+    if(!complete) throw new Error('Превышен лимит страниц отправлений');
     return {
       ok:true,
+      scope:'delivered_fbs_only',
+      finalBuyerPriceVerified:false,
       periodDays:7,
       items:Object.values(rows).map(r=>({
         productId:r.productId,
@@ -203,181 +217,23 @@ module.exports=async function handler(req,res){
       accrualTypes(),
       fbsCustomerPrices(products)
     ]);
-    const skuSet=new Set(products.map(x=>x.sku));
-    const stats={};
-
-    for(const p of products){
-      stats[p.sku]={
-        ...p,
-        sales:0,
-        commission:0,
-        delivery:0,
-        itemFees:0,
-        acquiring:0,
-        costs:0,
-        postingHits:0,
-        feeBreakdown:{},
-        sellerPriceSamples:[],
-        salePriceSamples:[],
-        saleAmountSamples:[],
-        coinvestmentSamples:[],
-        bonusSamples:[],
-        quantities:[],
-        financeTuples:[],
-        commissionFieldNames:new Set(),
-        productFieldNames:new Set()
-      };
-    }
-
     const today=new Date();
     const days=14;
-    let accrualRows=0;
-    const reconciliationSamples=[];
-
-    for(let offset=days-1;offset>=0;offset--){
+    const accruals=[];
+    // Completed UTC days only; today's incomplete accruals are not a full day's economics.
+    const dateTo=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate()-1)).toISOString().slice(0,10);
+    let dateFrom;
+    for(let offset=days;offset>=1;offset--){
       const d=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate()-offset));
       const date=d.toISOString().slice(0,10);
-      const accruals=await dayAccruals(date);
-      accrualRows+=accruals.length;
-
-      for(const acc of accruals){
-        const posting=acc?.posting;
-        if(posting?.products?.some(p=>String(p.sku)==='2921050259') && reconciliationSamples.length<12){
-          reconciliationSamples.push({
-            accrualKeys:Object.keys(acc),postingKeys:Object.keys(posting),
-            category:acc.accrued_category,typeId:acc.type_id,type:typeMap[String(acc.type_id)],
-            totalAmount:acc.total_amount,deliverySchema:posting.delivery_schema,
-            products:posting.products.map(p=>({sku:p.sku,quantity:p.quantity,commission:p.commission,delivery:p.delivery}))
-          });
-        }
-        if(posting&&Array.isArray(posting.products)){
-          for(const prod of posting.products){
-            const sku=String(prod?.sku??'');
-            if(!skuSet.has(sku)) continue;
-            const s=stats[sku];
-            const comm=prod?.commission||{};
-            const delivery=prod?.delivery||{};
-            const sale=money(comm?.seller_price);
-            const commission=money(comm?.sale_commission);
-            for(const k of Object.keys(comm||{})) s.commissionFieldNames.add(String(k));
-            for(const k of Object.keys(prod||{})) s.productFieldNames.add(String(k));
-            if(sale>0) s.sellerPriceSamples.push(sale);
-            const salePrice=money(comm?.sale_price);
-            const saleAmount=money(comm?.sale_amount);
-            const coinvestment=money(comm?.coinvestment);
-            const bonus=money(comm?.bonus);
-            const qty=Math.max(1,Number(prod?.quantity)||1);
-            if(salePrice>0) s.salePriceSamples.push(salePrice);
-            if(saleAmount>0) s.saleAmountSamples.push(saleAmount/qty);
-            if(coinvestment!==0) s.coinvestmentSamples.push(coinvestment/qty);
-            if(bonus!==0) s.bonusSamples.push(bonus/qty);
-            s.quantities.push(qty);
-            if(s.financeTuples.length<40){
-              s.financeTuples.push({
-                quantity:qty,
-                seller_price:r2(sale),
-                sale_price:r2(salePrice),
-                sale_amount:r2(saleAmount),
-                bonus:r2(bonus),
-                coinvestment:r2(coinvestment),
-                commission:r2(money(comm?.commission)),
-                commission_ratio:r2(Number(comm?.commission_ratio)||0),
-                sale_commission:r2(money(comm?.sale_commission))
-              });
-            }
-            const deliveryTotal=money(delivery?.total_accrued);
-
-            if(sale>0) s.sales+=sale;
-            if(commission<0) s.commission+=-commission;
-            if(deliveryTotal<0) s.delivery+=-deliveryTotal;
-            s.postingHits+=1;
-
-            for(const srv of delivery?.services||[]){
-              const val=money(srv?.accrued);
-              if(val>=0) continue;
-              const typeId=String(srv?.type_id??'');
-              const label=typeMap[typeId]?.description||typeMap[typeId]?.name||('Тип '+typeId);
-              s.feeBreakdown[label]=(s.feeBreakdown[label]||0)+(-val);
-            }
-          }
-        }
-
-        for(const grp of acc?.item_fees?.fees||[]){
-          const sku=String(grp?.sku??'');
-          if(!skuSet.has(sku)) continue;
-          const s=stats[sku];
-          for(const fee of grp?.fees||[]){
-            const val=money(fee?.accrued);
-            if(val>=0) continue;
-            const cost=-val;
-            s.itemFees+=cost;
-            const typeId=String(fee?.type_id??'');
-            const label=typeMap[typeId]?.description||typeMap[typeId]?.name||('Тип '+typeId);
-            if(/эквайринг|acquir/i.test(label)) s.acquiring+=cost;
-            s.feeBreakdown[label]=(s.feeBreakdown[label]||0)+cost;
-          }
-        }
-      }
+      if(!dateFrom)dateFrom=date;
+      accruals.push(...await dayAccruals(date));
     }
-
-    const items=Object.values(stats).map(s=>{
-      s.costs=s.commission+s.delivery+s.itemFees;
-      const ratio=s.sales>0?s.costs/s.sales:0;
-      const nonCommission=s.delivery+s.itemFees;
-      const nonCommissionRatio=s.sales>0?nonCommission/s.sales:0;
-      const count=Math.max(1,s.postingHits);
-      const avgDeliveryAndOther=(s.delivery+Math.max(0,s.itemFees-s.acquiring))/count;
-      const avgAcquiring=s.acquiring/count;
-      const breakdown=Object.entries(s.feeBreakdown)
-        .map(([name,amount])=>({name,amount:r2(amount)}))
-        .sort((a,b)=>b.amount-a.amount)
-        .slice(0,12);
-
-      const sellerStats=sampleStats(s.sellerPriceSamples);
-      const salePriceStats=sampleStats(s.salePriceSamples);
-      const saleAmountStats=sampleStats(s.saleAmountSamples);
-      const coinvestmentStats=sampleStats(s.coinvestmentSamples);
-      const bonusStats=sampleStats(s.bonusSamples);
-
-      return {
-        productId:s.productId,
-        offerId:s.offerId,
-        sku:s.sku,
-        name:s.name,
-        sales:r2(s.sales),
-        commission:r2(s.commission),
-        delivery:r2(s.delivery),
-        itemFees:r2(s.itemFees),
-        acquiring:r2(s.acquiring),
-        costs:r2(s.costs),
-        avgDeliveryAndOther:r2(avgDeliveryAndOther),
-        avgAcquiring:r2(avgAcquiring),
-        costRatio:r2(ratio*100),
-        nonCommissionCostRatio:r2(nonCommissionRatio*100),
-        postingHits:s.postingHits,
-        realizedPriceFields:{
-          seller_price:sellerStats,
-          sale_price:salePriceStats,
-          sale_amount_per_unit:saleAmountStats,
-          coinvestment_per_unit:coinvestmentStats,
-          bonus_per_unit:bonusStats
-        },
-        financeFields:{
-          commission:[...s.commissionFieldNames].sort(),
-          product:[...s.productFieldNames].sort()
-        },
-        breakdown
-      };
-    });
-
+    const ledger=aggregateAccruals(products,accruals,typeMap);
     return send(res,200,{
-      ok:true,
-      periodDays:days,
-      accrualRows,
-      reconciliationSamples,
-      fbsBuyerPrices,
-      items,
-      note:'fbsBuyerPrices.customerPrice — customer_price из /v4/posting/fbs/list с financial_data=true, то есть фактическая цена покупателя в отправлениях FBS. realizedPriceFields оставлен для сверки начислений. Расходы уровня продавца без привязки к SKU не распределяются.'
+      ok:true,calculationVersion:3,periodDays:days,dateFrom,dateTo,periodTimezone:'UTC',
+      fetchedAt:new Date().toISOString(),accrualRows:accruals.length,fbsBuyerPrices,...ledger,
+      note:'Суммы sale_amount, sale_commission, delivery.total_accrued и услуги учитываются со знаком и сверяются с total_amount. Бонусы и соинвест уже входят в sale_amount. Прибыль — оценка по начислениям периода до налога и нераспределённых расходов продавца; это не закрытая экономика отправлений. Возврат себестоимости в остатки не предполагается. Автоизменение цен запрещено.'
     });
   }catch(e){
     const status=Number(e?.status)||500;

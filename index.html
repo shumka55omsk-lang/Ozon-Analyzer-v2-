@@ -409,10 +409,10 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     const minProfit=Math.max(0,Number(cfg.minProfit)||0);
     const targetProfit=Math.max(minProfit,Number(cfg.targetProfit)||100);
     const finance=bathFinanceByProduct[String(p.productId||'')]||null;
-    const historicalFixed=finance&&Number(finance.postingHits)>=5
+    const historicalFixed=finance&&finance.unitEconomicsVerified===true&&Number(finance.postingHits)>=5
       ? Math.max(0,Number(finance.avgDeliveryAndOther)||0)
       : Math.max(0,Number(bathFinanceFallbackFixed)||120);
-    const financeSource=finance&&Number(finance.postingHits)>=5?'fact':(historicalFixed>0?'estimate':'none');
+    const financeSource=finance&&finance.unitEconomicsVerified===true&&Number(finance.postingHits)>=5?'fact':(historicalFixed>0?'estimate':'none');
     const profit=revenue-commission-acquiring-historicalFixed-cogs-extra;
     const margin=revenue>0?profit/revenue*100:0;
     const acquiringPct=revenue>0?acquiring/revenue*100:0;
@@ -483,6 +483,13 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
           <div>${sellerStatusChip(e)}</div>
         </div>
 
+        ${e.finance ? `<div class="small" style="margin:8px 0;padding:10px;background:#f1f5f9;border-radius:8px">
+          Начисления Ozon за завершённые 14 дней: ${e.finance.settlementReconciled?'суммы сверены':'требуется сверка'}. Продано по начислениям: ${Number(e.finance.soldUnits)||0} шт.; возвраты: ${Number(e.finance.returnedUnits)||0} шт.<br>
+          Оценка результата на проданную штуку: <strong>${Number.isFinite(e.finance.profitPerSoldUnitEstimate)?money(e.finance.profitPerSoldUnitEstimate):'недостаточно данных'}</strong>.
+          Учтены серверные затраты: себестоимость ${money(e.finance.cogsPerUnit||0)}, упаковка ${money(e.finance.packagingPerShippedUnit||0)} на отправленную штуку.
+          Без налога и общих расходов продавца. Период не является закрытой группой отправлений; для изменения цен эта оценка не используется.
+        </div>` : ''}
+
         <div class="seller-economy-grid">
           <div class="seller-metric">
             <div class="mlabel">Себестоимость</div>
@@ -495,7 +502,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
           <div class="seller-metric">
             <div class="mlabel">Логистика и услуги Ozon / шт.</div>
             <div class="mvalue">${e.historicalFixed>0?money(e.historicalFixed):'—'}</div>
-            <div class="small">${e.financeSource==='fact'?'по '+Number(e.finance?.postingHits||0)+' начислениям за 14 дней':(e.financeSource==='estimate'?'оценка / резерв 120 ₽':'нет истории')}</div>
+            <div class="small">${e.financeSource==='fact'?'по проверенным отправлениям':(e.financeSource==='estimate'?'оценка / резерв 120 ₽':'нет истории')}</div>
           </div>
           <div class="seller-metric">
             <div class="mlabel">Мин. прибыль / шт.</div>
@@ -564,7 +571,7 @@ table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:9px 11px
     for(const item of items){
       const id=String(item.productId||'');
       if(id) bathFinanceByProduct[id]=item;
-      if(Number(item.postingHits)>0&&Number(item.avgDeliveryAndOther)>0) vals.push(Number(item.avgDeliveryAndOther));
+      if(item.unitEconomicsVerified===true&&Number(item.postingHits)>=5&&Number.isFinite(item.avgDeliveryAndOther)&&item.avgDeliveryAndOther>=0) vals.push(Number(item.avgDeliveryAndOther));
     }
     vals.sort((a,b)=>a-b);
     if(vals.length){
