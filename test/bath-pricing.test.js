@@ -4,6 +4,16 @@ const assert = require('node:assert/strict');
 const {policyFor, economics, marketFor, stageFor, decide} = require('../lib/bath-pricing');
 const NOW = Date.parse('2026-10-13T04:00:00Z');
 const id = '3768184568';
+test('selected grey competitor is registered only for the matching grey product',()=>{
+  const config=require('../config/bath-pricing.json');
+  assert.deepEqual(policyFor('2808600941').competitors,['5459795463']);
+  for(const other of ['3768184568','3826876199','3768033857']) assert.deepEqual(policyFor(other).competitors,[]);
+  const ref=config.competitorCatalog['5459795463'].referenceObservation;
+  assert.equal(ref.bankOfferPrice,255);assert.equal(ref.otherBanksPrice,280);
+  assert.equal(ref.liveEligible,false);assert.equal(ref.region,null);
+  const market=marketFor(policyFor('2808600941'),require('../config/bath-market-observations.json').products['2808600941'],Date.now());
+  assert.equal(market.ready,false);
+});
 const policy = () => ({...policyFor(id), scheme:'FBS', competitors:['peer']});
 const observation = price => ({price, verified:true, finalBuyerPrice:true, inStock:true,
   source:'test fixture', contextKey:'Omsk|OzonCard|one-seat|public-discounts', observedAt:'2026-10-13T03:00:00Z'});

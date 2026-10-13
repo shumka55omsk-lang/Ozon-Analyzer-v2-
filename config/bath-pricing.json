@@ -10,9 +10,57 @@
   "observationMaxAgeHours": 24,
   "maxPriceStep": 0.05,
   "products": {
-    "3768184568": {"cogs": 55, "extra": 0, "targetProfit": 100, "stageStartedAt": null, "scheme": null, "competitors": []},
-    "3826876199": {"cogs": 55, "extra": 0, "targetProfit": 100, "stageStartedAt": null, "scheme": null, "competitors": []},
-    "2808600941": {"cogs": 55, "extra": 0, "targetProfit": 100, "stageStartedAt": null, "scheme": null, "competitors": []},
-    "3768033857": {"cogs": 55, "extra": 0, "targetProfit": 100, "stageStartedAt": null, "scheme": null, "competitors": []}
+    "3768184568": {
+      "cogs": 55,
+      "extra": 0,
+      "targetProfit": 100,
+      "stageStartedAt": null,
+      "scheme": null,
+      "competitors": []
+    },
+    "3826876199": {
+      "cogs": 55,
+      "extra": 0,
+      "targetProfit": 100,
+      "stageStartedAt": null,
+      "scheme": null,
+      "competitors": []
+    },
+    "2808600941": {
+      "cogs": 55,
+      "extra": 0,
+      "targetProfit": 100,
+      "stageStartedAt": null,
+      "scheme": null,
+      "competitors": [
+        "5459795463"
+      ]
+    },
+    "3768033857": {
+      "cogs": 55,
+      "extra": 0,
+      "targetProfit": 100,
+      "stageStartedAt": null,
+      "scheme": null,
+      "competitors": []
+    }
+  },
+  "competitorCatalog": {
+    "5459795463": {
+      "id": "5459795463",
+      "url": "https://www.ozon.ru/product/5459795463/",
+      "name": "EVA-сидушка для бани и сауны 40×25 см, серая, серый кант",
+      "monitoringStatus": "source_not_connected",
+      "referenceObservation": {
+        "source": "user_screenshot",
+        "sourceName": "IMG_5934.jpeg",
+        "receivedAt": "2026-10-13T10:40:36+06:00",
+        "bankOfferPrice": 255,
+        "otherBanksPrice": 280,
+        "bankOfferTerms": "С банками, указанными в акции; полный перечень и условия не раскрыты",
+        "region": null,
+        "liveEligible": false
+      }
+    }
   }
 }
