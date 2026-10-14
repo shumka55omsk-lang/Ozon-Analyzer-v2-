@@ -218,15 +218,28 @@ module.exports=async function handler(req,res){
       fbsCustomerPrices(products)
     ]);
     const today=new Date();
-    const days=14;
+    const q=req.query||{};
+    const datePattern=/^\d{4}-\d{2}-\d{2}$/;
+    const parseDay=value=>{
+      if(typeof value!=='string'||!datePattern.test(value))return null;
+      const t=Date.parse(value+'T00:00:00Z');
+      return Number.isFinite(t)&&new Date(t).toISOString().slice(0,10)===value?t:null;
+    };
+    const hasRange=q.dateFrom!==undefined||q.dateTo!==undefined;
+    if(hasRange&&(!parseDay(q.dateFrom)||!parseDay(q.dateTo)))
+      return send(res,400,{ok:false,error:'Укажите корректные dateFrom и dateTo в формате YYYY-MM-DD'});
+    const yesterday=Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate()-1);
+    const end=hasRange?parseDay(q.dateTo):yesterday;
+    const start=hasRange?parseDay(q.dateFrom):end-13*86400000;
+    const days=Math.round((end-start)/86400000)+1;
+    if(days<1||days>31||end>yesterday)
+      return send(res,400,{ok:false,error:'Период: от 1 до 31 дня, без будущих и незавершённых дат'});
     const accruals=[];
     // Completed UTC days only; today's incomplete accruals are not a full day's economics.
-    const dateTo=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate()-1)).toISOString().slice(0,10);
-    let dateFrom;
-    for(let offset=days;offset>=1;offset--){
-      const d=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate()-offset));
-      const date=d.toISOString().slice(0,10);
-      if(!dateFrom)dateFrom=date;
+    const dateFrom=new Date(start).toISOString().slice(0,10);
+    const dateTo=new Date(end).toISOString().slice(0,10);
+    for(let time=start;time<=end;time+=86400000){
+      const date=new Date(time).toISOString().slice(0,10);
       accruals.push(...await dayAccruals(date));
     }
     const ledger=aggregateAccruals(products,accruals,typeMap);
