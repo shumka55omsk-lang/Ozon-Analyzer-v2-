@@ -34,7 +34,7 @@ test('ignores standard item charges but includes seller-level fee', () => {
   assert.equal(r.charges.length,1);
 });
 test('requires cron secret, posts to Ozon finance and sends report to Telegram', async () => {
-  const handler = require('../api/ozon-paid-audit');
+  const handler = require('../lib/ozon-paid-audit-handler');
   const oldFetch = global.fetch;
   const keys = ['OZON_CLIENT_ID','OZON_FINANCE_API_KEY','OZON_API_KEY','CRON_SECRET','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID'];
   const prev = Object.fromEntries(keys.map(k => [k, process.env[k]]));
