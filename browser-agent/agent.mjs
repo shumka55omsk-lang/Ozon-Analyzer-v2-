@@ -45,10 +45,10 @@ async function extractPage(page,includeOverlay=false){
     const root=includeOverlay?document.body:(document.querySelector('main')||document.body);
     const body=document.body;
     const text=(root?.innerText||body?.innerText||'').slice(0,120000);
-    const lines=text.split(/\n+/).map(x=>x.trim()).filter(x=>x.length>=12&&x.length<=340).slice(0,1200);
+    const lines=text.split(/\n+/).map(x=>x.trim()).filter(x=>x.length>=12).map(x=>x.slice(0,340)).slice(0,1200);
     const rows=[...(body?.querySelectorAll('tr, [role="row"], article, [role="listitem"]')||[])].slice(0,450)
       .map(e=>(e.innerText||'').replace(/\s+/g,' ').trim())
-      .filter(x=>x.length>=12&&x.length<=340);
+      .filter(x=>x.length>=12).map(x=>x.slice(0,340));
     return {lines,rows,length:text.length};
   },{includeOverlay});
 }
@@ -80,7 +80,7 @@ function checkSession(url,snapshot) {
   const text=snapshot.lines.slice(0,12).join(' ').toLowerCase();
   if(/(?:войти в аккаунт|введите номер телефона|вход в озон|sign in|начать продавать на ozon)/i.test(text))
     throw Error('Появилась страница входа Ozon — обновите авторизацию');
-  if(snapshot.length<80)throw Error('В кабинете нет читаемого содержимого (возможно блокировка/загрузка)');
+  if(snapshot.length<80||!snapshot.lines.length)throw Error('В кабинете нет читаемого содержимого (возможно блокировка/загрузка)');
 }
 export async function runAudit() {
   await ensureFolders();
