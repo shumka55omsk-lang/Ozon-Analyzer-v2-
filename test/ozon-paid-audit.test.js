@@ -42,6 +42,7 @@ test('requires cron secret, posts to Ozon finance and sends report to Telegram',
   const calls = [];
   global.fetch = async (url, opts) => {
     calls.push({url, opts});
+    if (url.endsWith('/v1/actions')) return {ok:true,json:async()=>({result:[]})};
     if (url.endsWith('/v1/seller/info')) return {ok:true,json:async()=>({subscription:{is_premium:false,type:'Базовая'}})};
     if (url.endsWith('/v1/finance/accrual/types')) return {ok:true,json:async()=>({accrual_types:types})};
     if (url.endsWith('/v1/finance/accrual/by-day')) return {ok:true,json:async()=>({accruals:[], last_id:''})};
@@ -61,9 +62,16 @@ test('requires cron secret, posts to Ozon finance and sends report to Telegram',
     assert.equal(res.statusCode,200);
     assert.equal(res.value.ok,true);
     assert.equal(calls.filter(c=>c.url.includes('/v1/finance/accrual/by-day')).length,8);
-    assert.equal(calls.filter(c=>c.url.includes('sendMessage')).length,1);
+    assert.equal(calls.filter(c=>c.url.includes('sendMessage')).length,2);
   } finally {
     global.fetch=oldFetch;
     for (const k of keys) if (prev[k]===undefined) delete process.env[k]; else process.env[k]=prev[k];
   }
+});
+
+test('paid first reviews are flagged even when type is recurring', () => {
+  const t=[{id: 987,name:'Сбор первых отзывов',description:'Вознаграждение за отзыв'}];
+  const r=analyze({recent:[a(987,-900,'item')],history:[a(987,-300,'item')],types:t,subscription:{is_premium:false}});
+  assert.equal(r.charges.length,1);
+  assert.match(composeReport('2026-10-21',r),/ПЛАТНЫЕ ОТЗЫВЫ/);
 });
