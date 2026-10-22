@@ -33,7 +33,8 @@ try{
     const line=(await rl.question('\nОткройте «'+s.name+'» в Chrome. Enter = записать адрес, s = пропустить: ')).trim().toLowerCase();
     if(line==='s')continue;
     try{
-      const url=sellerUrl(page.url());
+      const active=ctx.pages().at(-1)||page;
+      const url=sellerUrl(active.url());
       const section={url};
       if(s.id==='notifications'){
         console.log('Если уведомления открываются только значком колокольчика, агент сможет нажимать его.');
