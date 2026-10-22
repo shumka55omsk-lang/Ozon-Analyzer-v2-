@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import {existsSync, mkdirSync} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import {fileURLToPath} from 'node:url';
 import process from 'node:process';
 import {chromium} from 'playwright';
 import {SECTIONS,extractFindings,compareFindings,formatReport,sellerUrl} from './audit-core.mjs';
@@ -39,9 +40,9 @@ async function sendTelegram(message) {
     if(!r.ok||!answer.ok)throw Error('Telegram HTTP '+r.status+': '+String(answer.description||'').slice(0,120));
   } finally {clearTimeout(timer);}
 }
-async function extractPage(page){
-  return page.evaluate(()=>{
-    const root=document.querySelector('main')||document.body;
+async function extractPage(page,includeOverlay=false){
+  return page.evaluate(({includeOverlay})=>{
+    const root=includeOverlay?document.body:(document.querySelector('main')||document.body);
     const body=document.body;
     const text=(root?.innerText||body?.innerText||'').slice(0,120000);
     const lines=text.split(/\n+/).map(x=>x.trim()).filter(x=>x.length>=12&&x.length<=340).slice(0,1200);
@@ -49,7 +50,7 @@ async function extractPage(page){
       .map(e=>(e.innerText||'').replace(/\s+/g,' ').trim())
       .filter(x=>x.length>=12&&x.length<=340);
     return {lines,rows,length:text.length};
-  });
+  },{includeOverlay});
 }
 async function openBellIfConfigured(page,sectionConfig){
   if(!sectionConfig.openBell)return;
@@ -77,7 +78,7 @@ function checkSession(url,snapshot) {
   if(!url.startsWith('https://seller.ozon.ru/'))throw Error('Сессия Ozon не открылась: требуется вход заново');
   if(/\/(?:login|signin|auth)(?:[/?#]|$)/i.test(url))throw Error('Сессия Ozon истекла — выполните setup');
   const text=snapshot.lines.slice(0,12).join(' ').toLowerCase();
-  if(/(?:войти в аккаунт|введите номер телефона|вход в озон|sign in)/i.test(text))
+  if(/(?:войти в аккаунт|введите номер телефона|вход в озон|sign in|начать продавать на ozon)/i.test(text))
     throw Error('Появилась страница входа Ozon — обновите авторизацию');
   if(snapshot.length<80)throw Error('В кабинете нет читаемого содержимого (возможно блокировка/загрузка)');
 }
@@ -105,7 +106,7 @@ export async function runAudit() {
         await page.goto(url,{waitUntil:'domcontentloaded',timeout:25000});
         await page.waitForTimeout(1800);
         await openBellIfConfigured(page,route);
-        const snapshot=await extractPage(page);
+        const snapshot=await extractPage(page,section.id==='notifications'&&route.openBell===true);
         checkSession(page.url(),snapshot);
         sectionFindings[section.id]=extractFindings(section.id,snapshot);
         checked.push(section.name);
@@ -132,8 +133,7 @@ export async function runAudit() {
   return result;
 }
 
-if(import.meta.url===new URL('file://'+process.argv[1]?.replaceAll('\\','/')).href||
-   process.argv[1]?.endsWith('agent.mjs')){
+if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   runAudit().catch(async(e)=>{
     const message='🚨 Ozon: БРАУЗЕРНЫЙ АГЕНТ НЕ СМОГ ВЫПОЛНИТЬ ПРОВЕРКУ.\n'+String(e?.message||e).slice(0,350)+
       '\nНет оснований считать, что платные услуги отсутствуют.';
