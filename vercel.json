@@ -6,12 +6,19 @@
     },
     "api/bath-finance.js": {
       "maxDuration": 60
+    },
+    "api/ozon-paid-audit.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
     {
       "path": "/api/bath-daily",
       "schedule": "5 2 * * *"
+    },
+    {
+      "path": "/api/ozon-paid-audit",
+      "schedule": "30 2 * * *"
     }
   ],
   "rewrites": [
