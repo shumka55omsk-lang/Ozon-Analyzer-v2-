@@ -209,6 +209,8 @@ async function fbsCustomerPrices(products){
 }
 
 module.exports=async function handler(req,res){
+  if ((req.query||{}).audit==='paid-services' || String(req.url||'').split('?')[0]==='/api/ozon-paid-audit')
+    return require('../lib/ozon-paid-audit-handler')(req,res);
   if(req.method!=='GET') return send(res,405,{ok:false,error:'Используйте GET'});
 
   try{
