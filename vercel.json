@@ -6,9 +6,6 @@
     },
     "api/bath-finance.js": {
       "maxDuration": 60
-    },
-    "api/ozon-paid-audit.js": {
-      "maxDuration": 60
     }
   },
   "crons": [
@@ -25,6 +22,10 @@
     {
       "source": "/api/bath-policy",
       "destination": "/api/seller-products?policy=1"
+    },
+    {
+      "source": "/api/ozon-paid-audit",
+      "destination": "/api/bath-finance?audit=paid-services"
     }
   ]
 }
